@@ -1,0 +1,7 @@
+,DisplayName,Description,CharacterClass,AttributeEffectClass,Portrait,DefaultLevel,DefaultSkills
+c0000,Galaxy,Blue hair girl.,/Game/BP_Character.BP_Character_C,,,1,
+c0001,Atom,Yellow hair boy.,/Game/BP_Character.BP_Character_C,CharacterStatus,,1,
+c0002,Optics,Fox girl.,/Game/BP_Character.BP_Character_C,CharacterStatus,,1,
+c0003,Aqueous,I don't have any idea.,/Game/BP_Character.BP_Character_C,CharacterStatus,,1,
+c0004,XueJing,Cat girl.,/Game/BP_Character.BP_Character_C,CharacterStatus,,1,
+c0005,Akashin,Ore no akashi wo miro!,/Game/BP_Character.BP_Character_C,CharacterStatus,,1,

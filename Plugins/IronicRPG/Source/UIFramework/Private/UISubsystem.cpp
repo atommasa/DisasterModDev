@@ -1,0 +1,123 @@
+// Fill out your copyright notice in the Description page of Project Settings.
+
+
+#include "UISubsystem.h"
+#include "Widgets/WidgetBase.h"
+
+bool UUISubsystem::ShouldCreateSubsystem(UObject* Outer) const
+{
+	if (this->GetClass()->IsInBlueprint() && Super::ShouldCreateSubsystem(Outer))
+	{
+		return true;
+	}
+
+	return false;
+}
+
+void UUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
+{
+	Super::Initialize(Collection);
+	// Initialize the UIManager
+	
+}
+
+void UUISubsystem::Deinitialize()
+{
+	// Clean up the UIStack
+	CloseAllUI();
+}
+
+void UUISubsystem::OpenUI(const FString UIName, const bool bHideLastUI)
+{
+	if (UIInfos.Contains(UIName))
+	{
+		TSubclassOf<UWidgetBase> WidgetClass = UIInfos[UIName];
+		if (WidgetClass)
+		{
+			UWidgetBase* NewUI = CreateWidget<UWidgetBase>(GetWorld(), WidgetClass);
+			if (NewUI)
+			{
+				// If we are hiding the last UI, set its visibility to hidden
+				if (bHideLastUI && !IsUIStackEmpty())
+				{
+					UWidgetBase* LastUI = UIStack.Top();
+					if (LastUI)
+					{
+						LastUI->SetVisibility(ESlateVisibility::Hidden);
+					}
+				}
+
+				NewUI->AddToViewport();
+				UIStack.Push(NewUI);
+				SetInputModeForUI(NewUI);
+			}
+		}
+	}
+}
+
+void UUISubsystem::CloseUI()
+{
+	if (!IsUIStackEmpty())
+	{
+		UWidgetBase* TopUI = UIStack.Pop();
+		if (TopUI)
+		{
+			TopUI->RemoveFromParent();
+		}
+	}
+
+	// If there are still UIs in the stack, show the new top UI
+	if (!IsUIStackEmpty())
+	{
+		UWidgetBase* NewTopUI = UIStack.Top();
+		if (NewTopUI)
+		{
+			NewTopUI->SetVisibility(ESlateVisibility::Visible);
+			SetInputModeForUI(NewTopUI);
+		}
+	}
+	else
+	{
+		RessetInputMode();
+	}
+}
+
+void UUISubsystem::CloseAllUI()
+{
+	for (UWidgetBase* UI : UIStack)
+	{
+		if (UI)
+		{
+			UI->RemoveFromParent();
+		}
+	}
+
+	UIStack.Empty();
+}
+
+void UUISubsystem::SetInputModeForUI(UWidgetBase* ActiveUI)
+{
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		FInputModeGameAndUI InputMode;
+		InputMode.SetWidgetToFocus(ActiveUI->TakeWidget());
+		InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+
+		PC->SetInputMode(InputMode);
+		PC->bShowMouseCursor = true;
+
+		PC->InputComponent->bBlockInput = true;
+	}
+}
+
+void UUISubsystem::RessetInputMode()
+{
+	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	{
+		FInputModeGameOnly InputMode;
+		PC->SetInputMode(InputMode);
+		PC->bShowMouseCursor = false;
+
+		PC->InputComponent->bBlockInput = false;
+	}
+}
