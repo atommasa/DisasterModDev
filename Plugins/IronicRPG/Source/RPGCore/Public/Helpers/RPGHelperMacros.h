@@ -5,6 +5,26 @@
 #include "CoreMinimal.h"
 
 /*----------------------------------------------------------------------------
+    Common Macros
+----------------------------------------------------------------------------*/
+
+/**
+ * @brief A macro to bind a member function to a lambda with no parameters.
+ *
+ * @return A lambda that captures `this` and calls the member function.
+ */
+#define BIND_TFUNCTION_NoResult(FuncName, ...) \
+	[&]() { this->FuncName(__VA_ARGS__); }
+
+/**
+ * @brief A macro to bind a member function to a lambda with one parameter.
+ * 
+ * @return A lambda that captures `this` and calls the member function with the provided arguments.
+ */
+#define BIND_TFUNCTION_OneResult(FuncName, ...) \
+	[&](auto&& Result) { this->FuncName(Result, ## __VA_ARGS__); }
+
+/*----------------------------------------------------------------------------
     WITH_EDITOR Macros
 ----------------------------------------------------------------------------*/
 #if WITH_EDITOR
@@ -15,7 +35,7 @@
  * 
  * @param ArrProp		An array property which its length is limited by an int32 property
  * @param LimitProp		An int32 property which its value limit an array's length
-*/
+ */
 #define CLAMPED_ARRAY(ArrProp, LimitProp)                                                   \
         static const FName LimitPropName = GET_MEMBER_NAME_CHECKED(std::remove_pointer<decltype(this)>::type, LimitProp); \
         FProperty* LimitProperty = this->GetClass()->FindPropertyByName(LimitPropName);      \
@@ -57,10 +77,10 @@ private:                                                                        
     virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override\
     {                                                                                        \
         Super::PostEditChangeProperty(PropertyChangedEvent);                                 \
-        PropertiesChanged();                                                                 \
+        PropertiesChanged(PropertyChangedEvent);                                                                 \
     }                                                                                        \
                                                                                              \
-    void PropertiesChanged()
+    void PropertiesChanged(FPropertyChangedEvent& PropertyChangedEvent)
 
 #else // WITH_EDITOR
 

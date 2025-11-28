@@ -1,9 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Components/ActorComponent.h"
+#include "Controllers/BaseControlComponent.h"
 #include "UIControlComponent.generated.h"
 
 class UWidgetBase;
@@ -13,22 +13,25 @@ class UEnhancedInputLocalPlayerSubsystem;
 class UInputMappingContext;
 class UInputAction;
 
-UCLASS( ClassGroup=(Custom), meta=(BlueprintSpawnableComponent) )
-class UIFRAMEWORK_API UUIControlComponent : public UActorComponent
+UCLASS( meta=(BlueprintSpawnableComponent) )
+class UIFRAMEWORK_API UUIControlComponent : public UBaseControlComponent
 {
 	GENERATED_BODY()
 
-public:	
-	// Sets default values for this component's properties
-	UUIControlComponent();
-
 protected:
+	UUIControlComponent(const FObjectInitializer& ObjectInitializer);
+
+	virtual void InitializeComponent() override;
+
 	// Called when the game starts
 	virtual void BeginPlay() override;
 
-public:	
 	// Called every frame
 	virtual void TickComponent(float DeltaTime, ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
+
+public:
+	virtual void EnableAllInputs() override;
+	virtual void DisableAllInputs() override;
 
 public: // UActorComponent
 	// Navigate in the specified direction
@@ -73,13 +76,10 @@ public:
 	UWidgetBase* GetTopUI() const;
 
 protected: // Ehanced Input
-	// Input subsystem
-	UPROPERTY()
-	UEnhancedInputLocalPlayerSubsystem* InputSubsystem = nullptr;
-
 	// Input mapping context
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	UInputMappingContext* InputMapping = nullptr;
+	UInputMappingContext* UIContext = nullptr;
+	DEFINE_INPUTMAPPING_FUNCTIONS(InputSubsystem, UIContext, ControlPriority)
 
 	// Input action for navigating
 	UPROPERTY(EditDefaultsOnly, Category = "Input")

@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 

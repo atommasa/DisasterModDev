@@ -41,9 +41,6 @@ public:
     UFUNCTION(BlueprintCallable)
     virtual void ResetAnimation();
 
-    UFUNCTION(BlueprintCallable)
-    void SetContentText(const FText& NewText);
-
     UPROPERTY(BlueprintAssignable, Category = "Interactive")
     FOnWidgetClicked OnWidgetClicked;
 
@@ -54,33 +51,31 @@ public:
     FOnWidgetUnhovered OnWidgetUnhovered;
 
 protected:
-    UPROPERTY(meta = (BindWidgetOptional))
-    class UImage* BackgroundImage;
+    // The default text content for this widget
+    UPROPERTY(EditAnywhere, Category = "Text")
+	FText DefaultButtonText;
 
-    UPROPERTY(meta = (BindWidgetOptional))
-    class UImage* IconImage;
-
+    // The text block for displaying content text
     UPROPERTY(meta = (BindWidgetOptional))
     class UTextBlock* ContentText;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    UMaterialInterface* BackgroundMaterial;
+	// The rich text block for displaying content text
+    UPROPERTY(meta = (BindWidgetOptional))
+    class URichTextBlock* ContentRichText;
 
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Appearance")
-    UMaterialInterface* IconMaterial;
-
-    UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Text")
-    FText Text;
-
+	// The sound played when the widget is hovered
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
     USoundBase* HoverSound;
 
+	// The sound played when the widget is clicked
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
     USoundBase* ClickSound;
 
+	// The animation played when the widget is hovered
     UPROPERTY(meta = (BindWidgetAnimOptional), Transient)
     UWidgetAnimation* HoverAnimation;
 
+	// The animation played when the widget is clicked
     UPROPERTY(meta = (BindWidgetAnimOptional), Transient)
     UWidgetAnimation* ClickAnimation;
 

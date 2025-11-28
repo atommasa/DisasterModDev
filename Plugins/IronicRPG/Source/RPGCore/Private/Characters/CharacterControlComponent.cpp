@@ -1,53 +1,39 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Characters/CharacterControlComponent.h"
 #include "Characters/BaseCharacter.h"
+#include "Characters/PlayableCharacter.h"
+#include "Controllers/RPGPlayerController.h"
 #include "Characters/Components/RPGCharacterMovementComponent.h"
 
-#include "EnhancedInputSubsystems.h"
 #include "Components/InputComponent.h"
 #include "EnhancedInputComponent.h"
+
+#include "Camera/RPGSpringArmComponent.h"
+
+UCharacterControlComponent::UCharacterControlComponent(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
+{
+	AllowedControlMode = ERPGControlMode::Gameplay;
+}
 
 void UCharacterControlComponent::InitializeComponent()
 {
 	Super::InitializeComponent();
-
-	
 }
 
 void UCharacterControlComponent::BeginPlay()
 {
 	Super::BeginPlay();
 
-	Controller = Cast<APlayerController>(GetOwner());
-	if (!Controller)
-	{
-		return;
-	}
+	// Listen for controlled character changes
+	Controller->OnControlledCharacterChanged.AddUniqueDynamic(this, &UCharacterControlComponent::OnControlledCharacterChanged);
+	
+	// Initial update of the controlled character
+	UpdateControlledCharacter();
 
-	ControlledCharacter = Cast<ABaseCharacter>(Controller->GetPawn());
-	if (!ControlledCharacter)
-	{
-		return;
-	}
-
-	CharacterMovement = Cast<URPGCharacterMovementComponent>(ControlledCharacter->GetCharacterMovement());
-	if (!CharacterMovement)
-	{
-		// UE_LOG(LogTemp, Warning, TEXT("CharacterControlComponent: No valid movement component found for character %s"), *ControlledCharacter->GetName());
-		return;
-	}
-
-	// Find the input subsystem, and add the input mapping context
-	InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(Controller->GetLocalPlayer());
-	if (InputSubsystem)
-	{
-		if (InputMapping)
-		{
-			InputSubsystem->AddMappingContext(InputMapping, 0);
-		}
-	}
+	EnableAllInputs();
 
 	// Bind input actions
 	if (UEnhancedInputComponent* InputComponent = CastChecked<UEnhancedInputComponent>(Controller->InputComponent))
@@ -55,6 +41,10 @@ void UCharacterControlComponent::BeginPlay()
 		if (LookAction)
 		{
 			InputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &UCharacterControlComponent::Look);
+		}
+		if (ZoomAction)
+		{
+			InputComponent->BindAction(ZoomAction, ETriggerEvent::Triggered, this, &UCharacterControlComponent::Zoom);
 		}
 		if (MoveAction)
 		{
@@ -72,6 +62,34 @@ void UCharacterControlComponent::BeginPlay()
 	}
 }
 
+void UCharacterControlComponent::UpdateControlledCharacter()
+{
+	if (!Controller)
+	{
+		return;
+	}
+
+	ControlledCharacter = Cast<ABaseCharacter>(Controller->GetPawn());
+	if (ControlledCharacter)
+	{
+		CharacterMovement = Cast<URPGCharacterMovementComponent>(ControlledCharacter->GetCharacterMovement());
+		if (CharacterMovement)
+		{
+			CharacterMovement->TargetDirection = FVector::ZeroVector;
+		}
+	}
+}
+
+void UCharacterControlComponent::EnableAllInputs()
+{
+	EnableMoveContext();
+}
+
+void UCharacterControlComponent::DisableAllInputs()
+{
+	DisableMoveContext();
+}
+
 void UCharacterControlComponent::Look(const FInputActionValue& Value)
 {
 	if (!ControlledCharacter)
@@ -83,6 +101,17 @@ void UCharacterControlComponent::Look(const FInputActionValue& Value)
 	FVector2D LookInput = Value.Get<FVector2D>();
 	ControlledCharacter->AddControllerYawInput(LookInput.X);
 	ControlledCharacter->AddControllerPitchInput(-LookInput.Y);
+}
+
+void UCharacterControlComponent::Zoom(const FInputActionValue& Value)
+{
+	if (ControlledCharacter)
+	{
+		if (auto* SpringArm = ControlledCharacter->FindComponentByClass<URPGSpringArmComponent>())
+		{
+			SpringArm->CameraZoom(Value.Get<float>());
+		}
+	}
 }
 
 void UCharacterControlComponent::Move(const FInputActionValue& Value)
@@ -133,4 +162,13 @@ void UCharacterControlComponent::Sprint(const FInputActionValue& Value)
 	}
 
 	CharacterMovement->CharacterSprint();
+}
+
+void UCharacterControlComponent::OnControlledCharacterChanged()
+{
+	// We need to update the current character of this component first
+	UpdateControlledCharacter();
+
+	// Recover contexts' availability
+	EnableMoveContext();
 }

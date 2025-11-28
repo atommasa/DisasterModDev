@@ -8,10 +8,6 @@
 #include "Delegates/Delegate.h"
 #include "ButtonBase.generated.h"
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnButtonPressed);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnButtonHovered);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnButtonUnhovered);
-
 /**
  * 
  */

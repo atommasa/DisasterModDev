@@ -17,16 +17,18 @@ class UIFRAMEWORK_API UUISubsystem : public UGameInstanceSubsystem
 	GENERATED_BODY()
 
 public: // Subsystem Interface
-	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
-	void Initialize(FSubsystemCollectionBase& Collection) override;
-	void Deinitialize() override;
+	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
+	virtual void Deinitialize() override;
 
 public: // UI Management
 	// Push a UI to the stack
 	UFUNCTION(BlueprintCallable, Category = "UIManager")
-	void OpenUI(const FString UIName, const bool bHideLastUI);
+	UWidgetBase* OpenUI(const FString UIName, const bool bHideLastUI = true);
 
-	// Push a UI to the stack
+	UFUNCTION(BlueprintCallable, Category = "UIManager")
+	UWidgetBase* OpenUIByClass(TSubclassOf<UWidgetBase> UIClass, const bool bHideLastUI = true);
+
+	// Pop the top UI from the stack
 	UFUNCTION(BlueprintCallable, Category = "UIManager")
 	void CloseUI();
 

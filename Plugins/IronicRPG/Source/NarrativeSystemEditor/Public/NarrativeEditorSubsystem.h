@@ -7,7 +7,7 @@
 #include "DataTypes/RPGId.h"
 #include "NarrativeEditorSubsystem.generated.h"
 
-class UCharacterPrimaryAsset;
+class UCharacterAsset;
 
 /**
  * 
@@ -22,11 +22,11 @@ public:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
 
-	TMap<FRPGId, UCharacterPrimaryAsset*> TryGetSpeakerAssets();
+	TMap<FRPGId, UCharacterAsset*> TryGetSpeakerAssets();
 
 protected:	
 	UPROPERTY()
-	TMap<FRPGId, UCharacterPrimaryAsset*> SpeakerAssetMap;
+	TMap<FRPGId, UCharacterAsset*> SpeakerAssetMap;
 
 	UFUNCTION()
 	void OnAssetAdded(const FAssetData& AssetData);

@@ -51,8 +51,7 @@ public:
 	void SmoothRotateToTargetDirection(float DeltaTime);
 	void UpdateJumpRotateGraceTime(float DeltaTime);
 	void ResetToWalkingSpeed();
-	
-protected:
+
 	UPROPERTY(BlueprintReadOnly, Category = "Character Movement")
 	FVector TargetDirection = FVector::ZeroVector;
 

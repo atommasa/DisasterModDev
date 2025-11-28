@@ -1,0 +1,69 @@
+// Copyright Ironic Studio. All Rights Reserved.
+
+
+#include "WorldGameMode.h"
+#include "LoadingScreenSubsystem.h"
+
+void AWorldGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
+{
+	Super::InitGame(MapName, Options, ErrorMessage);
+
+	
+}
+
+void AWorldGameMode::BeginPlay()
+{
+	Super::BeginPlay();
+
+	ULoadingScreenSubsystem* LoadingScreenSubsystem = ULoadingScreenSubsystem::Get(this);
+	if (LoadingScreenSubsystem)
+	{
+		LoadingScreenSubsystem->StopLoadingScreen();
+	}
+}
+
+AActor* AWorldGameMode::ChoosePlayerStart_Implementation(AController* Player)
+{
+	auto* Subsystem = GetGameInstance()->GetSubsystem<UGameZoneSubsystem>();
+	if (!Subsystem)
+	{
+		return Super::ChoosePlayerStart_Implementation(Player);
+	}
+
+	ARPGPlayerStart* PlayerStart = Cast<ARPGPlayerStart>(Super::ChoosePlayerStart_Implementation(Player));
+
+	if (PlayerStart)
+	{
+		Subsystem->CurrentContext.ZoneId = PlayerStart->ZoneId;
+		Subsystem->CurrentContext.SubZoneIds = PlayerStart->SubZoneIds;
+		Subsystem->CurrentContext.EntryPointTag = PlayerStart->PlayerStartTag;
+
+		return PlayerStart;
+	}
+
+	return Super::ChoosePlayerStart_Implementation(Player);
+}
+
+APawn* AWorldGameMode::SpawnDefaultPawnFor_Implementation(AController* NewPlayer, AActor* SpawnTransform)
+{
+	if (auto* CharacterSubsystem = GetGameInstance()->GetSubsystem<UCharacterSubsystem>())
+	{
+		CharacterSubsystem->SpawnPartyMembers(SpawnTransform->GetActorLocation(), SpawnTransform->GetActorRotation(), true, ESpawnPartyMode::ByPlayerPartyIndex);
+
+		if (auto* CurrentCharacter = CharacterSubsystem->GetPlayerCharacter())
+		{
+			if (NewPlayer)
+			{
+				NewPlayer->Possess(CurrentCharacter);
+			}
+
+			return CurrentCharacter;
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("No current character found in CharacterSubsystem!"));
+		}
+	}
+
+	return Super::SpawnDefaultPawnFor_Implementation(NewPlayer, SpawnTransform);
+}

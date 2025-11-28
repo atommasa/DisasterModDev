@@ -38,8 +38,17 @@ public class RPGEditor : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+                "InputCore",
                 "PropertyEditor",
-				"RPGCore",
+                "StructUtilsEditor",
+                "UnrealEd",
+                "AssetTools",
+                "AdvancedPreviewScene",
+                "KismetWidgets",
+				"EditorStyle",
+                "ToolMenus",
+                "GameplayAbilities",
+                "RPGCore",
             }
 			);
 		

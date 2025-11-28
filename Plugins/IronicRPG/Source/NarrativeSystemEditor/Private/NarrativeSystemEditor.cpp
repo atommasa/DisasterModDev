@@ -2,7 +2,6 @@
 
 #include "NarrativeSystemEditor.h"
 #include "AssetToolsModule.h"
-#include "AssetToolsModule.h"
 #include "Assets/NarrativeAssetAction.h"
 #include "Interfaces/IPluginManager.h"
 #include "EdGraphUtilities.h"

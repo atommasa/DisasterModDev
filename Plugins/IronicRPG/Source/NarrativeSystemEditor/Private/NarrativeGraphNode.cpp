@@ -11,7 +11,7 @@
 #include "Assets/NarrativeAssetEditorApp.h"
 #include "NarrativeAsset.h"
 #include "NarrativeEditorSubsystem.h"
-#include "Characters/CharacterPrimaryAsset.h"
+#include "Characters/CharacterAsset.h"
 #include "Widgets/Text/SRichTextBlock.h"
 #include "Components/RichTextBlock.h"
 #include "Decorators/RPGTextDecoratorInstance.h"
@@ -38,7 +38,7 @@ FText UNarrativeGraphNode::GetNodeTitle(ENodeTitleType::Type TitleType) const
 		return FText::FromString(TEXT("Unknown Speaker"));
 	}
 
-	FString Title = TEXT("Speaker : ") + Assets[SpeakerId]->DefaultData.DisplayName.ToString();
+	FString Title = TEXT("Speaker : ") + Assets[SpeakerId]->GetDisplayName().DefaultName.ToString();
 
 	return FText::FromString(Title);
 }
@@ -200,8 +200,8 @@ TSharedRef<SWidget> SNarrativeGraphNode::CreateTitleComboButtonMenuContent()
 
 		for (const auto& Asset : Assets)
 		{
-			FText SpeakerName = Asset.Value->GetDisplayName();
-			FRPGId SpeakerId = Asset.Value->Id;
+			FText SpeakerName = Asset.Value->GetDisplayName().DefaultName;
+			FRPGId SpeakerId = Asset.Value->GetId();
 
 			ButtonList->AddSlot()
 				.AutoHeight()

@@ -38,8 +38,16 @@ void AFollowLocationTracker::Tick(float DeltaSeconds)
 		return;
 	}
 
-	const FVector Origin = LeaderController->GetNavAgentLocation();
-	const FRotator ForwardRotation = LeaderController->GetPawn()->GetActorForwardVector().Rotation();
+	FVector Origin = LeaderController->GetNavAgentLocation();
+	FRotator ForwardRotation;
+	if (auto Pawn = LeaderController->GetPawn())
+	{
+		ForwardRotation = Pawn->GetActorForwardVector().Rotation();
+	}
+	else
+	{
+		return;
+	}
 
 	for (int32 i = 0; i < MaxLocations; ++i)
 	{
@@ -67,7 +75,10 @@ void AFollowLocationTracker::Tick(float DeltaSeconds)
 			ETraceTypeQuery::TraceTypeQuery1,
 			false,
 			ActorsToIgnore,
-			bDrawDebug ? EDrawDebugTrace::ForOneFrame : EDrawDebugTrace::None,
+#if WITH_EDITORONLY_DATA
+			bDrawDebug ? EDrawDebugTrace::ForOneFrame : 
+#endif // WITH_EDITORONLY_DATA
+			EDrawDebugTrace::None,
 			HitResult,
 			true,
 			FColor::Red,
@@ -110,6 +121,12 @@ void AFollowLocationTracker::Tick(float DeltaSeconds)
 			Locations[i].bCannotFollow = false;
 		}
 		
+		// If the location is occupied but the controller is no longer valid, unoccupy it
+		if (!Locations[i].OccupiedBy.IsValid() || !Locations[i].OccupiedBy->GetPawn())
+		{
+			Locations[i].Unoccupy();
+		}
+
 #if WITH_EDITORONLY_DATA
 		if (bDrawDebug)
 		{

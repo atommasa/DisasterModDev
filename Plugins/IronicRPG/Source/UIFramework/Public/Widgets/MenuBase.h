@@ -16,6 +16,9 @@ class UIFRAMEWORK_API UMenuBase : public UWidgetBase, public INavigationInterfac
 {
 	GENERATED_BODY()
 	
+protected:
+	virtual void NativeConstruct() override;
+
 public: // Widget Actions
 	// Switch widget
 	UFUNCTION(BlueprintCallable)
@@ -29,13 +32,12 @@ public: // Widget Actions
 	UFUNCTION(BlueprintCallable)
 	bool SwitchWidgetByDirection(EUINavigation Direction);
 
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
+	UFUNCTION(BlueprintImplementableEvent)
 	void OnSwitchWidget(int32 CurrentIndex, int32 LastIndex);
-	void OnSwitchWidget_Implementation(int32 WidgetIndex, int32 LastIndex) {}
 
 public: // UDisasterWidgetBase
 	// Confirm current selection button
-	virtual bool Confirm() override;
+	virtual bool Confirm_Implementation() override;
 
 	// Navigate to the next button in the specified direction
 	virtual bool Navigate(EUINavigation Direction) override;
@@ -45,18 +47,22 @@ public:
 	UWidgetBase* GetCurrentWidget() const { return CurrentWidget; }
 
 protected:
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, meta=(BindWidget))
 	class UWidgetSwitcher* WidgetSwitcher;
 
 	UPROPERTY()
 	UWidgetBase* CurrentWidget = nullptr;
 
+	// If true, allows switching input
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Menu")
+	bool bAllowSwitchingInput = true;
+
 	// If true, switching pages will wrap around when reaching the ends
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Menu")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Menu")
 	bool bWrapSwitching = true;
 
 protected: // Sound Effect
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Sound")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Sound")
 	USoundBase* SwitchWidgetSound;
 
 };

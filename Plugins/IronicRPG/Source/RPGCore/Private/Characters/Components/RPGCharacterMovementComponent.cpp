@@ -18,6 +18,7 @@ URPGCharacterMovementComponent::URPGCharacterMovementComponent()
 	AirControl = 0.5f;
 	FallingLateralFriction = 2.0f;
 
+	bRunPhysicsWithNoController = true;
 }
 
 void URPGCharacterMovementComponent::InitializeComponent()

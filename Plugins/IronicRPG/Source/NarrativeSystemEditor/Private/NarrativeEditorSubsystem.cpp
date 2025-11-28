@@ -3,7 +3,7 @@
 
 #include "NarrativeEditorSubsystem.h"
 #include "Engine/AssetManager.h"
-#include "Characters/CharacterPrimaryAsset.h"
+#include "Characters/CharacterAsset.h"
 
 void UNarrativeEditorSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
@@ -21,7 +21,7 @@ void UNarrativeEditorSubsystem::Deinitialize()
 	UE_LOG(LogTemp, Warning, TEXT("NarrativeEditorSubsystem Deinitialized!"));
 }
 
-TMap<FRPGId, UCharacterPrimaryAsset*> UNarrativeEditorSubsystem::TryGetSpeakerAssets()
+TMap<FRPGId, UCharacterAsset*> UNarrativeEditorSubsystem::TryGetSpeakerAssets()
 {
 	if (bHasInitializedSpeakerAssets)
 	{
@@ -30,7 +30,7 @@ TMap<FRPGId, UCharacterPrimaryAsset*> UNarrativeEditorSubsystem::TryGetSpeakerAs
 
 	TArray<FPrimaryAssetId> CharacterAssets;
 	UAssetManager::Get().GetPrimaryAssetIdList(
-		FPrimaryAssetType(UCharacterPrimaryAsset::CharacterAssetType),
+		FPrimaryAssetType(UCharacterAsset::GetAssetTypeStatic()),
 		CharacterAssets
 	);
 
@@ -51,10 +51,10 @@ TMap<FRPGId, UCharacterPrimaryAsset*> UNarrativeEditorSubsystem::TryGetSpeakerAs
 	// Iterate through the loaded character assets and populate the maps
 	for (const FPrimaryAssetId& Id : CharacterAssets)
 	{
-		auto* Asset = Cast<UCharacterPrimaryAsset>(UAssetManager::Get().GetPrimaryAssetObject(Id));
+		auto* Asset = Cast<UCharacterAsset>(UAssetManager::Get().GetPrimaryAssetObject(Id));
 		if (Asset)
 		{
-			SpeakerAssetMap.Add(Asset->Id, Asset);
+			SpeakerAssetMap.Add(Asset->GetId(), Asset);
 		}
 	}
 
@@ -64,24 +64,24 @@ TMap<FRPGId, UCharacterPrimaryAsset*> UNarrativeEditorSubsystem::TryGetSpeakerAs
 
 void UNarrativeEditorSubsystem::OnAssetAdded(const FAssetData& AssetData)
 {
-	if (AssetData.AssetClassPath == UCharacterPrimaryAsset::StaticClass()->GetClassPathName())
+	if (AssetData.AssetClassPath == UCharacterAsset::StaticClass()->GetClassPathName())
 	{
-		auto* Asset = Cast<UCharacterPrimaryAsset>(AssetData.GetAsset());
-		if (Asset && Asset->Id.IsValid() && !SpeakerAssetMap.Contains(Asset->Id))
+		auto* Asset = Cast<UCharacterAsset>(AssetData.GetAsset());
+		if (Asset && Asset->GetId().IsValid() && !SpeakerAssetMap.Contains(Asset->GetId()))
 		{
-			SpeakerAssetMap.Add(Asset->Id, Asset);
+			SpeakerAssetMap.Add(Asset->GetId(), Asset);
 		}
 	}
 }
 
 void UNarrativeEditorSubsystem::OnAssetRemoved(const FAssetData& AssetData)
 {
-	if (AssetData.AssetClassPath == UCharacterPrimaryAsset::StaticClass()->GetClassPathName())
+	if (AssetData.AssetClassPath == UCharacterAsset::StaticClass()->GetClassPathName())
 	{
-		auto* Asset = Cast<UCharacterPrimaryAsset>(AssetData.GetAsset());
-		if (Asset && SpeakerAssetMap.Contains(Asset->Id))
+		auto* Asset = Cast<UCharacterAsset>(AssetData.GetAsset());
+		if (Asset && SpeakerAssetMap.Contains(Asset->GetId()))
 		{
-			SpeakerAssetMap.Remove(Asset->Id);
+			SpeakerAssetMap.Remove(Asset->GetId());
 
 			for (auto It = SpeakerAssetMap.CreateIterator(); It; ++It)
 			{

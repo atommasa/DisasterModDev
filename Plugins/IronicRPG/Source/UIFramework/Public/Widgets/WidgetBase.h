@@ -19,19 +19,27 @@ protected: // UUserWidget
 
 public:
 	// Confirm current UI
-	UFUNCTION(BlueprintCallable)
-	virtual bool Confirm();
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
+	bool Confirm();
+	virtual bool Confirm_Implementation();
 
 	// Cancel current UI
+	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
+	void Cancel();
+	virtual void Cancel_Implementation();
+
+	// Check if this UI is the topmost UI
 	UFUNCTION(BlueprintCallable)
-	virtual void Cancel();
+	bool IsTop() const;
 
 protected:
+	// Referencr to the UIControlComponent that owns this widget
 	UPROPERTY(BlueprintReadOnly, Category = "UIComponent")
 	class UUIControlComponent* UIControlComponent = nullptr;
 
-	UFUNCTION(BlueprintCallable)
-	bool IsTop() const;
+	// Whether this UI can be canceled (closed) by the cancel action
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "UI")
+	bool bCanCancel = true;
 
 protected: // Sound Effect
 	UFUNCTION(BlueprintCallable)

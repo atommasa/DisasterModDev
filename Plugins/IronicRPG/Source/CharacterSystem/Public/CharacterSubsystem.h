@@ -1,19 +1,34 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Subsystems/GameInstanceSubsystem.h"
+#include "Characters/BaseCharacter.h"
+#include "Characters/PlayableCharacter.h"
+#include "Controllers/RPGPlayerController.h"
+#include "Characters/CharacterAsset.h"
 #include "SaveGame/Saveable.h"
-#include "SaveGame/CharacterSaveModule.h"
+#include "Flowable.h"
 #include "Characters/CharacterDataTypes.h"
 #include "DataTypes/RPGId.h"
 #include "CharacterSubsystem.generated.h"
+
+DECLARE_LOG_CATEGORY_EXTERN(LogCharacterSubsystem, Log, All);
+
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnCharacterSpawned, FRPGId);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnPartyMembersSpawned, const TArray<FRPGId>&);
+
+class APlayableCharacter;
+
+class URPGPrimaryAsset;
+class UCharacterAsset;
 
 UENUM(BlueprintType)
 enum class EPartyOperationResult : uint8
 {
 	Success UMETA(DisplayName = "Success"),
+	InvalidOperation UMETA(DisplayName = "Invalid Operation"),
 	CharacterNotFound UMETA(DisplayName = "Character Not Found"),
 	CharacterUnavailable UMETA(DisplayName = "Character Unavailable"),
 	PartyFull UMETA(DisplayName = "Party Full"),
@@ -21,53 +36,59 @@ enum class EPartyOperationResult : uint8
 	NotInParty UMETA(DisplayName = "Not In Party")
 };
 
+UENUM(BlueprintType)
+enum class ESpawnPartyMode : uint8
+{
+	KeepControlSameCharacter UMETA(DisplayName = "Keep Control Same Character"),
+	ByPlayerPartyIndex UMETA(DisplayName = "By Player Party Index")
+};
+
 /**
- * 
+ * Character Subsystem to manage character data and instances.
  */
-UCLASS(Blueprintable)
-class CHARACTERSYSTEM_API UCharacterSubsystem : public UGameInstanceSubsystem, public ISaveable
+UCLASS(Abstract, Blueprintable)
+class CHARACTERSYSTEM_API UCharacterSubsystem : public UGameInstanceSubsystem, public ISaveable, public IFlowable
 {
 	GENERATED_BODY()
 
 protected: // Subsystem Interface
-	virtual bool ShouldCreateSubsystem(UObject* Outer) const override;
 	void Initialize(FSubsystemCollectionBase& Collection) override;
 	void Deinitialize() override;
 
-public: // Data Layer
-	// Map of character primary assets, keyed by character Id
-	UPROPERTY(BlueprintReadWrite, SaveGame, Category = "Character")
-	TMap<FRPGId, class UCharacterPrimaryAsset*> CharacterAssetMap;
+	virtual void StartupSubsystem_Implementation() override;
+	virtual void ShutdownSubsystem_Implementation() override {}
 
-	// Map of character data instances, keyed by character Id
-	UPROPERTY(BlueprintReadWrite, SaveGame, Category = "Character")
-	TMap<FRPGId, FCharacterInstanceData> CharacterDataMap;
+// ============
+//  Data Layer
+// ============
 
-	// Modify the character data for a specific character Id
+public:
+	// Map of character data, keyed by character Id, but only stores CHARACTER DATA YOU WANT TO SAVE
+	// And it is not "Authority Data", so we recommend that you only use it for loading and saving
+	// The actual runtime data is owned by the character itself
+	// Or you should call SyncCharacterDataMap() to sync the data with all character assets in the game
+	UPROPERTY(BlueprintReadWrite, Category = "Character")
+	TMap<FRPGId, FCharacterSaveData> CharacterDataMap;
+
+	// Sync the character data map with all character assets in the game
 	UFUNCTION(BlueprintCallable)
-	void ModifyCharacterData(const FRPGId Id, FCharacterInstanceData& Data, const UGameplayEffect* Effect, const float Level = 1.0f);
+	virtual void SyncCharacterDataMap();
 
-private: // Data Layer
-	// Read the character data from the DataTable and populate the CharacterDataMap
-	void LoadPlayableCharacters();
-
-	// Check if a character Id patterns match the specified format cXXXX (where X is a digit)
-	bool IsCharacterIdMatched(const FRPGId Id) const;
-
-	UPROPERTY()
-	TObjectPtr<class UAbilitySystemComponent> GhostASC;
-
-	UPROPERTY()
-	TObjectPtr<class UCharacterAttributeSet> GhostAttributes;
-
-public: // Instance Layer
-	// Map of instances of characters currently in the game
-	TMap<FRPGId, TWeakObjectPtr<ABaseCharacter>> InstanceCharacters;
-
-	// Get a character instance by its Id
+	// Modify the character data of multiple characters by applying a gameplay effect
+	// Only modifies the data in CharacterDataMap, does not affect the actual character instances
+	// If you want to modify the actual character instances, you should apply the effect to them directly
 	UFUNCTION(BlueprintCallable)
-	ABaseCharacter* GetCharacterInstance(const FRPGId Id) const;
+	virtual void ModifyCharactersData(const TArray<FRPGId>& Ids, UGameplayEffect* Effect, const float Level = 1.0f);
 
+// =================
+//  Instance Layer
+// =================
+
+public:
+	// Instances of characters currently in the game
+	UPROPERTY(BlueprintReadOnly, Category = "Character")
+	TMap<FGuid, TObjectPtr<ABaseCharacter>> InstanceCharacters;
+	
 	// Set the availability status of a character
 	UFUNCTION(BlueprintCallable)
 	void SetCharacterAvailability(const FRPGId Id, const ECharacterAvailabilityStatus Status);
@@ -75,62 +96,142 @@ public: // Instance Layer
 	UFUNCTION(BlueprintCallable)
 	bool IsAvailable(const FRPGId Id) const;
 
+	/**
+	 * Use a RPGId to spawn a character
+	 * 
+	 * @param Id The RPGId of a character that you want to spawn.
+	 * @param CharacterClass The character class of the character instance. If it is nullptr, use ABaseCharacter as default.
+	 * @param Location Location to spawn.
+	 * @param Rotation Rotation to spawn.
+	 * @param bAsync Whether to load the character asset asynchronously. If true, the character will spawn synchronously, but data will be loaded asynchronously.
+	 * @param InGuid The Guid to identify the character instance. If it is invalid, a new Guid will be generated.
+	 */
 	UFUNCTION(BlueprintCallable)
-	class ABaseCharacter* SpawnCharacter(const FRPGId Id, const FVector Location, const FRotator Rotation);
+	ABaseCharacter* SpawnCharacter(
+		const FRPGId& Id,
+		const TSubclassOf<ABaseCharacter> CharacterClass = nullptr,
+		const FVector Location = FVector::ZeroVector,
+		const FRotator Rotation = FRotator::ZeroRotator,
+		const bool bAsync = true,
+		const FGuid InGuid = FGuid()
+	);
 
+	/**
+	 * Use a character asset to spawn a character
+	 *
+	 * @param Asset The asset of a character that you want to spawn.
+	 * @param CharacterClass The character class of the character instance. If it is nullptr, use ABaseCharacter as default.
+	 * @param Location Location to spawn.
+	 * @param Rotation Rotation to spawn.
+	 * @param InGuid The Guid to identify the character instance. If it is invalid, a new Guid will be generated.
+	 */
 	UFUNCTION(BlueprintCallable)
-	void SpawnPartyMembers(const FVector Location, const FRotator Rotation);
-
-	UFUNCTION(BlueprintCallable)
-	void SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FVector Location, const FRotator Rotation);
-
-	UFUNCTION(BlueprintCallable)
-	void DespawnCharacter(const FRPGId Id);
-
-private: // Instance Layer
-	UPROPERTY()
-	TArray<FRPGId> WaitForRemove;
-
-	void ClearWaitForRemove();
-
-public:
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame, Category = "Character|Party")
-	FRPGId CurrentCharacterId;
-
-	UFUNCTION(BlueprintCallable)
-	ABaseCharacter* GetCurrentCharacter() const { return GetCharacterInstance(CurrentCharacterId); }
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame, Category = "Character|Party")
-	TArray<FRPGId> PartyMembers;
-
-	UFUNCTION(BlueprintCallable)
-	EPartyOperationResult AddPartyMember(const FRPGId Id);
-
-	UFUNCTION(BlueprintCallable)
-	EPartyOperationResult RemovePartyMember(const FRPGId Id);
-
-	UFUNCTION(BlueprintCallable)
-	bool IsPartyMember(const FRPGId Id) const;
-
-	UFUNCTION(BlueprintCallable)
-	bool CanJoinParty(const FRPGId Id) const;
+	ABaseCharacter* SpawnCharacterByAsset(
+		UCharacterAsset* Asset,
+		const TSubclassOf<ABaseCharacter> CharacterClass = nullptr,
+		const FVector Location = FVector::ZeroVector,
+		const FRotator Rotation = FRotator::ZeroRotator,
+		const FGuid InGuid = FGuid()
+	);
 
 	UFUNCTION(BlueprintCallable)
-	int32 GetMaxPartyMembers() const { return MaxPartyMembers; }
+	void DespawnCharacter(const FGuid& Guid);
+
+	FOnCharacterSpawned OnCharacterSpawned;
+
+	FOnPartyMembersSpawned OnPartyMembersSpawned;
+
+private:
+	void OnCharacterToSpawnLoaded(URPGPrimaryAsset* Asset, const FGuid InGuid = FGuid());
 
 protected:
-	UPROPERTY(EditDefaultsOnly, Category = "Character|Party")
-	int32 MaxPartyMembers = 3;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Party")
+	TSubclassOf<APlayableCharacter> PlayableCharacterClass = nullptr;
 
+	// Offset distance between spawned party members.
 	UPROPERTY(EditDefaultsOnly, Category = "Character|Party")
 	float SpawnLocationOffset = 200.0f;
 
+	// Offset angle between spawned party members.
 	UPROPERTY(EditDefaultsOnly, Category = "Character|Party")
 	float SpawnRotationOffset = 60.0f;
 
+public: // Party Functions
+	UPROPERTY(BlueprintReadOnly, Category = "Character|Party")
+	int32 PlayerPartyIndex;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Character|Party")
+	TArray<FRPGId> PartyMemberIds;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Character|Party")
+	TArray<FGuid> PartyMemberGuids;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Character|Party")
+	int32 MaxPartyMembers;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Party", meta=(ClampMin = 0.0f))
+	float SwitchCharacterDuration = 1.f;
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	TArray<APlayableCharacter*> GetPartyMembers() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	ABaseCharacter* GetPlayerCharacter() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	TArray<ABaseCharacter*> GetPartyMemberInstances() const;
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	ABaseCharacter* GetPartyMemberInstanceById(const FRPGId Id) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	void SpawnPartyMembers(const FVector Location, const FRotator Rotation, bool bAsync = true, ESpawnPartyMode SpawnPartyMode = ESpawnPartyMode::KeepControlSameCharacter);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	void SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FVector Location, const FRotator Rotation, bool bAsync = true, ESpawnPartyMode SpawnPartyMode = ESpawnPartyMode::KeepControlSameCharacter);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	void TeleportPartyMembers(const FVector Location, const FRotator Rotation);
+
+	FORCEINLINE void AddPartyMember(const FRPGId Id, const int32 Index = -1);
+	
+	FORCEINLINE void RemovePartyMember(const FRPGId Id);
+
+	FORCEINLINE void RemovePartyMemberByIndex(const int32 Index);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	FORCEINLINE void AddPartyMember(EPartyOperationResult& Result, const FRPGId Id, const int32 Index = -1);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	FORCEINLINE void RemovePartyMember(EPartyOperationResult& Result, const FRPGId Id);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	FORCEINLINE void RemovePartyMemberByIndex(EPartyOperationResult& Result, const int32 Index);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	bool IsPartyMember(const FRPGId Id) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	bool CanJoinParty(const FRPGId Id) const;
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	int32 GetMaxPartyMembers() const { return MaxPartyMembers; }
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	void SwitchPlayerCharacterByIndex(const int32 Index, const float DurationOverridden = -1.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	void SwitchPlayerCharacterById(const FRPGId& Id, const float DurationOverridden = -1.0f);
+
+private:
+	void UpdatePossessedCharacter(ABaseCharacter* OldCharacter, ABaseCharacter* NewCharacter, const FVector& Position, const FRotator& Rotation);
+
 public: // ISaveable
-	virtual ESaveModuleType GetSaveModuleType() const override { return ESaveModuleType::Character; }
-	virtual void GetSaveData(FBaseSaveModule* SaveData) const override;
-	virtual void ApplySaveData(const FBaseSaveModule* SaveData) override;
+	virtual FName GetSaveModuleType() const override;
+	virtual void SaveDataTo(FInstancedStruct& SaveData) override;
+	virtual void LoadDataFrom(const FInstancedStruct& SaveData) override;
+
+	virtual FSimpleMulticastDelegate& OnLoadComplete() override;
+	FSimpleMulticastDelegate LoadCompleteDelegate;
 
 };

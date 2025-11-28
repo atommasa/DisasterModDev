@@ -6,8 +6,8 @@
 #include "Characters/BaseCharacter.h"
 #include "PlayableCharacter.generated.h"
 
+class URPGSpringArmComponent;
 class UCameraComponent;
-class USpringArmComponent;
 
 /**
  * 
@@ -23,7 +23,7 @@ public:
 
 public: // Camera
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
-	USpringArmComponent* CameraBoom;
+	URPGSpringArmComponent* CameraBoom;
 
 	UPROPERTY(VisibleAnywhere, Category = "Camera")
 	UCameraComponent* FollowCamera;

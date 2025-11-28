@@ -20,7 +20,7 @@ void UNavigationWidget::NativeConstruct()
 
 void UNavigationWidget::RebuildNavigation()
 {
-    GridButtonMap.Empty();
+    ButtonCoordMap.Empty();
     MaxRow = 0;
     MaxCol = 0;
 
@@ -29,7 +29,7 @@ void UNavigationWidget::RebuildNavigation()
 
     for (const auto& Entry : NewButtons)
     {
-        GridButtonMap.Add(Entry.Key, Entry.Value);
+        ButtonCoordMap.Add(Entry.Key, Entry.Value);
         MaxRow = FMath::Max(MaxRow, Entry.Key.Y + 1);
         MaxCol = FMath::Max(MaxCol, Entry.Key.X + 1);
 
@@ -39,18 +39,18 @@ void UNavigationWidget::RebuildNavigation()
 
 void UNavigationWidget::SetNavigationFocus(FIntPoint Coord)
 {
-    if (GridButtonMap.Contains(Coord) && GridButtonMap.Contains(CurrentFocusCoord))
+    if (ButtonCoordMap.Contains(Coord) && ButtonCoordMap.Contains(CurrentFocusCoord))
     {
 #if WITH_EDITORONLY_DATA
         if (bHighlightFocusing)
         {
-            GridButtonMap[CurrentFocusCoord]->DebugHighlightHoveredWidget(false);
-            GridButtonMap[Coord]->DebugHighlightHoveredWidget(true);
+            ButtonCoordMap[CurrentFocusCoord]->DebugHighlightHoveredWidget(false);
+            ButtonCoordMap[Coord]->DebugHighlightHoveredWidget(true);
         }
 #endif
 
-        GridButtonMap[CurrentFocusCoord]->PlayUnhover();
-        GridButtonMap[Coord]->PlayHover();
+        ButtonCoordMap[CurrentFocusCoord]->PlayUnhover();
+        ButtonCoordMap[Coord]->PlayHover();
 
         // Call OnNavigate
         if (IsTop())
@@ -70,13 +70,13 @@ void UNavigationWidget::SetNavigationFocusByWidget(UInteractiveWidget* Widget)
         return;
     }
 
-    if (const FIntPoint* Coord = GridButtonMap.FindKey(Widget))
+    if (const FIntPoint* Coord = ButtonCoordMap.FindKey(Widget))
     {
 #if WITH_EDITORONLY_DATA
-        if (GridButtonMap.Contains(CurrentFocusCoord) && GridButtonMap.Contains(*Coord))
+        if (ButtonCoordMap.Contains(CurrentFocusCoord) && ButtonCoordMap.Contains(*Coord))
         {
-            GridButtonMap[CurrentFocusCoord]->DebugHighlightHoveredWidget(false);
-            GridButtonMap[*Coord]->DebugHighlightHoveredWidget(true);
+            ButtonCoordMap[CurrentFocusCoord]->DebugHighlightHoveredWidget(false);
+            ButtonCoordMap[*Coord]->DebugHighlightHoveredWidget(true);
         }
 #endif
         
@@ -126,28 +126,28 @@ bool UNavigationWidget::Navigate(EUINavigation Direction)
             Next.X = Warp(Next.X, 0, MaxCol - 1);
             Next.Y = Warp(Next.Y, 0, MaxRow - 1);
         }
-
-        if (GridButtonMap.Contains(Next) && Next != CurrentFocusCoord)
+        
+        if (ButtonCoordMap.Contains(Next) && Next != CurrentFocusCoord)
         {
             SetNavigationFocus(Next);
             PlayUISoundEffect(NavigationSound);
             return true;
         }
     }
-
+    
     return false;
 }
 
-bool UNavigationWidget::Confirm()
+bool UNavigationWidget::Confirm_Implementation()
 {
-    if (GridButtonMap.Contains(CurrentFocusCoord))
+    if (ButtonCoordMap.Contains(CurrentFocusCoord))
     {
-        GridButtonMap[CurrentFocusCoord]->PlayClick();
+        ButtonCoordMap[CurrentFocusCoord]->PlayClick();
 
 #if WITH_EDITORONLY_DATA
         if (bHighlightFocusing)
         {
-            GridButtonMap[CurrentFocusCoord]->DebugHighlightClickedWidget(true);
+            ButtonCoordMap[CurrentFocusCoord]->DebugHighlightClickedWidget(true);
         }
 #endif
 

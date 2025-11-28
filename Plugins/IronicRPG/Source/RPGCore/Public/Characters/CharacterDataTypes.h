@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
@@ -16,47 +16,42 @@ UENUM(BlueprintType)
 enum class ECharacterAvailabilityStatus : uint8
 {
 	// Character is not available for selection or use (e.g., not yet unlocked)
-	Unavailable UMETA(DisplayName = "Unavailable"),
+	Unavailable = 0x00 UMETA(DisplayName = "Unavailable"),
 
 	// Character is temporarily unavailable (e.g., on a mission, captured, etc.)
-	TemporaryLeave UMETA(DisplayName = "TemporaryLeave"),
-
-	// Character is available for selection and use, but may have limitations (e.g., HP == 0)
-	Exhausted UMETA(DisplayName = "Exhausted"),
+	TemporaryLeave = 0x01 UMETA(DisplayName = "TemporaryLeave"),
 
 	// Character is fully available for selection and use
-	Available UMETA(DisplayName = "Available"),
+	Available = 0x02 UMETA(DisplayName = "Available"),
 
 	// Character is locked in the party, cannot be removed
-	LockedInParty UMETA(DisplayName = "LockedInParty"),
-
-	// Emeny character or NPC, not available for player control
-	EnemyOrNPC UMETA(DisplayName = "EnemyOrNPC")
+	LockedInParty = 0x04 UMETA(DisplayName = "LockedInParty"),
 
 };
 
+/**
+ * This struct holds the save data for a character, including availability status, mesh, skills, and attributes.
+ */
 USTRUCT(BlueprintType)
-struct FCharacterInstanceData
+struct RPGCORE_API FCharacterSaveData
 {
     GENERATED_BODY()
 
 public:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame)
-	FText DisplayName;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame)
-	FText Description;
-
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame)
 	ECharacterAvailabilityStatus AvailabilityStatus = ECharacterAvailabilityStatus::Unavailable;
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame)
-	TSoftObjectPtr<USkeletalMesh> CharacterMesh = nullptr;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame, meta=(AssetBundles = "Character"))
+	TObjectPtr<USkeletalMesh> CharacterMesh = nullptr;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame)
 	TArray<FRPGId> Skills;
 
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame)
-    TMap<FString, float> Attributes;
+    TMap<FGameplayAttribute, float> Attributes;
+
+	// Indicates whether this data is to save to or load from a save file
+	UPROPERTY(BlueprintReadOnly, SaveGame)
+	bool bIsSaveData = false;
 
 };

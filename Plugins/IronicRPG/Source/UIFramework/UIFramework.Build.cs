@@ -41,6 +41,7 @@ public class UIFramework : ModuleRules
 				"Slate",
 				"SlateCore",
 				"UMG",
+				"RPGCore",
                 
 				// ... add private dependencies that you statically link with here ...	
 			}

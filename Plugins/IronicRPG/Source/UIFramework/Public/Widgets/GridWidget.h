@@ -15,7 +15,7 @@ class UIFRAMEWORK_API UGridWidget : public UNavigationWidget
 	GENERATED_BODY()
 	
 protected:
-	UPROPERTY(meta = (BindWidget))
+	UPROPERTY(BlueprintReadOnly, meta = (BindWidget))
 	class UUniformGridPanel* GridPanel;
 
 private:

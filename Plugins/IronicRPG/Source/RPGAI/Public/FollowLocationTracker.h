@@ -73,7 +73,7 @@ struct FFollowLocation
 /**
  * 
  */
-UCLASS()
+UCLASS(notplaceable)
 class RPGAI_API AFollowLocationTracker : public AActor
 {
 	GENERATED_BODY()

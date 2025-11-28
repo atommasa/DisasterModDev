@@ -4,6 +4,21 @@
 #include "Widgets/MenuBase.h"
 #include "Components/WidgetSwitcher.h"
 
+void UMenuBase::NativeConstruct()
+{
+	Super::NativeConstruct();
+
+	// Get the current widget from the switcher
+	if (WidgetSwitcher && WidgetSwitcher->GetNumWidgets() > 0)
+	{
+		CurrentWidget = Cast<UWidgetBase>(WidgetSwitcher->GetActiveWidget());
+		if (CurrentWidget && CurrentWidget->Implements<UNavigationInterface>())
+		{
+			Cast<INavigationInterface>(CurrentWidget)->ResetNavigationFocus();
+		}
+	}
+}
+
 bool UMenuBase::SwitchWidget(UWidgetBase* Widget)
 {
 	if (!Widget || !WidgetSwitcher)
@@ -51,6 +66,11 @@ bool UMenuBase::SwitchWidgetByIndex(int32 Index)
 
 bool UMenuBase::SwitchWidgetByDirection(EUINavigation Direction)
 {
+	if (!bAllowSwitchingInput)
+	{
+		return false;
+	}
+
 	if (WidgetSwitcher && WidgetSwitcher->GetNumWidgets() > 0)
 	{
 		const int32 NumWidgets = WidgetSwitcher->GetNumWidgets();
@@ -85,7 +105,7 @@ bool UMenuBase::SwitchWidgetByDirection(EUINavigation Direction)
 	return false;
 }
 
-bool UMenuBase::Confirm()
+bool UMenuBase::Confirm_Implementation()
 {
 	return CurrentWidget ? CurrentWidget->Confirm() : false;
 }

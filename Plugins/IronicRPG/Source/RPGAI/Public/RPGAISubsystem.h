@@ -21,7 +21,7 @@ protected: // Subsystem Interface
 	void Initialize(FSubsystemCollectionBase& Collection) override;
 	void Deinitialize() override;
 
-	public: // Follow
+public: // Follow
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Follow Location")
 	TSubclassOf<AFollowLocationTracker> FollowLocationTrackerClass;
 

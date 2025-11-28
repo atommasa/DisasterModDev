@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright Ironic Studio. All Rights Reserved.
 
 using UnrealBuildTool;
 
@@ -26,9 +26,13 @@ public class RPGGameplay : ModuleRules
 			new string[]
 			{
 				"Core",
+				"UMG",
                 "RPGCore",
-				"SaveSystem",
+				"UIFramework",
+                "SaveSystem",
+				"LoadingScreen",
                 "CharacterSystem",
+				"GameZoneSystem",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

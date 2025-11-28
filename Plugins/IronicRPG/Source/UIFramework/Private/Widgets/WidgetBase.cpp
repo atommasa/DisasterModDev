@@ -11,7 +11,7 @@ void UWidgetBase::NativeConstruct()
 {
 	Super::NativeConstruct();
 
-	if (APlayerController* PC = GetWorld()->GetFirstPlayerController())
+	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
 	{
         if (UUIControlComponent* Comp = PC->FindComponentByClass<UUIControlComponent>())
         {
@@ -20,13 +20,19 @@ void UWidgetBase::NativeConstruct()
 	}
 }
 
-bool UWidgetBase::Confirm()
+bool UWidgetBase::Confirm_Implementation()
 {
 	return false;
 }
 
-void UWidgetBase::Cancel()
+void UWidgetBase::Cancel_Implementation()
 {
+	// If cannot cancel, do nothing
+    if (!bCanCancel)
+    {
+        return;
+    }
+
     if (UGameInstance* GI = GetGameInstance())
     {
         if (UUISubsystem* UISubsystem = GI->GetSubsystem<UUISubsystem>())

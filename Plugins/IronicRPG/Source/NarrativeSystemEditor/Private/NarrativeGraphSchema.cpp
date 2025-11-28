@@ -19,7 +19,7 @@
 #include "Nodes/NarrativeCutsceneNode.h"
 #include "Nodes/NarrativeCutsceneNodeInfo.h"
 #include "NarrativeEditorSubsystem.h"
-#include "Characters/CharacterPrimaryAsset.h"
+#include "Characters/CharacterAsset.h"
 
 void UNarrativeGraphSchema::GetGraphContextActions(FGraphContextMenuBuilder& ContextMenuBuilder) const
 {
@@ -40,13 +40,13 @@ void UNarrativeGraphSchema::GetGraphContextActions(FGraphContextMenuBuilder& Con
 				FText::FromString(TEXT("Dialog Nodes")),
 				FText::Format(
 					NSLOCTEXT("NarrativeEditor", "AddNarrativeNode", "Add narrative node for {0}"),
-					Asset.Value->DefaultData.DisplayName
+					Asset.Value->GetDisplayName().DefaultName
 				),
 				FText::FromString(TEXT("Makes a new node")),
 				0
 			));
 		
-		NewNodeAction->NodeName = Asset.Value->Id.Id;
+		NewNodeAction->NodeName = Asset.Value->GetId().Id;
 
 		ContextMenuBuilder.AddAction(NewNodeAction);
 	}

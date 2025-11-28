@@ -1,11 +1,17 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Characters/BaseCharacter.h"
-#include "Characters/CharacterPrimaryAsset.h"
+#include "Characters/CharacterAsset.h"
 #include "Characters/Components/RPGCharacterMovementComponent.h"
 #include "Characters/Components/CharacterAbilitySystemComponent.h"
-#include "Characters/Attributes/CharacterAttributeSet.h"
+#include "Characters/Attributes/RPGAttributeSet.h"
+#include "Characters/Attributes/LevelAttributeSet.h"
+
+#include "Components/CapsuleComponent.h"
+
+#include "Helpers/RPGHelperMacros.h"
+#include "Assets/RPGAssetLibrary.h"
 
 #include "AIController.h"
 #include "NavigationInvokerComponent.h"
@@ -17,26 +23,43 @@ ABaseCharacter::ABaseCharacter(const FObjectInitializer& ObjectInitializer)
  	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
 	PrimaryActorTick.bCanEverTick = true;
 
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetRelativeRotation(FRotator(0.f, 270.f, 0.f));
+	}
+
 	// Create Navigation Invoker Component
 	NavigationInvoker = CreateDefaultSubobject<UNavigationInvokerComponent>(TEXT("NavigationInvokerComp"));
 
-	// Create Abilities
-	Abilities = CreateDefaultSubobject<UCharacterAbilitySystemComponent>(TEXT("AbilitySystemComp"));
-
-	// Create Attribute Set
-	AttributeSet = CreateDefaultSubobject<UCharacterAttributeSet>(TEXT("AttributeSet"));
+	// Create AbilitySystemComponent
+	AbilitySystemComponent = CreateDefaultSubobject<URPGAbilitySystemComponent>(TEXT("AbilitySystemComp"));
 
 	AutoPossessAI = EAutoPossessAI::Disabled;
+
 }
 
 // Called when the game starts or when spawned
 void ABaseCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
 	
-	if (Abilities)
+}
+
+void ABaseCharacter::PostInitializeComponents()
+{
+	Super::PostInitializeComponents();
+
+	if (AbilitySystemComponent)
 	{
-		Abilities->InitAbilityActorInfo(this, this); // OwnerActor, AvatarActor
+		AbilitySystemComponent->InitAbilityActorInfo(this, this); // OwnerActor, AvatarActor
+
+		// Create Attribute Sets
+		for (TSubclassOf<URPGAttributeSet> AttributeClass : AttributeSets)
+		{
+			UAttributeSet* Attributes = NewObject<UAttributeSet>(this, AttributeClass);
+			AbilitySystemComponent->AddSpawnedAttribute(Attributes);
+		}
 	}
 }
 
@@ -82,57 +105,131 @@ bool ABaseCharacter::IsAIControlled() const
 	return Controller ? Controller->IsA(AAIController::StaticClass()) : false;
 }
 
-void ABaseCharacter::InitDefaultData(UCharacterPrimaryAsset* Asset)
+void ABaseCharacter::InitCharacterData(const UCharacterAsset* Asset, const FCharacterSaveData& Data)
 {
-	if (!Abilities || !Asset)
+	if (!Asset)
 	{
 		return;
 	}
 
-	if (Asset->BehaviorTree.IsValid())
-	{
-		BehaviorTree = Asset->BehaviorTree.Get();
-	}
-	else
-	{
-		BehaviorTree = Asset->BehaviorTree.LoadSynchronous();
-		if (!BehaviorTree)
-		{
-			UE_LOG(LogTemp, Warning, TEXT("BehaviorTree is not set in CharacterDefaultData for %s"), *GetName());
-		}
-	}
+	Id = Asset->GetId();
+
+	GetCapsuleComponent()->SetCapsuleHalfHeight(Asset->GetDefaultCapsuleHalfHeight());
+	GetCapsuleComponent()->SetCapsuleRadius(Asset->GetDefaultCapsuleRadius());
+	GetMesh()->SetRelativeLocation(FVector(0.f, 0.f, -Asset->GetDefaultCapsuleHalfHeight()));
+
+	BehaviorTree = Asset->GetBehaviorTree().LoadSynchronous();
 
 	/*if ()*/
 	{
 		SpawnDefaultController();
 	}
 
-	TSubclassOf<UGameplayEffect> AttributeEffectClass = Asset->AttributeEffectClass.LoadSynchronous();
-	int32 DefaultLevel = Asset->DefaultLevel;
-	if (!AttributeEffectClass)
+	// If the data is from save file, use it directly; otherwise, use the default level attributes from the asset
+	if (Data.bIsSaveData)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AttributeEffectClass is not set in CharacterDefaultData for %s"), *GetName());
+		SetCharacterData(Data);
+	}
+	else
+	{
+		FCharacterSaveData NewData = Asset->GetDefaultData();
+		NewData.bIsSaveData = true; // Mark as save data
+
+		SetCharacterData(NewData); // Set default data first
+
+		InitAttributeWithGrowthCurve(Asset->GetGrowthTable().LoadSynchronous()); // Then initialize attributes with growth curve
+	}
+}
+
+void ABaseCharacter::InitCharacterDataById(const FRPGId& InId, const FCharacterSaveData& Data)
+{
+	URPGAssetLibrary::GetAssetByRPGIdAsync(InId, {}, [&](auto&& Result) {
+		this->InitCharacterData(Cast<UCharacterAsset>(Result), Data);
+		});
+}
+
+void ABaseCharacter::InitCharacterDataDefault(const UCharacterAsset* Asset)
+{
+	if (!Asset)
+	{
 		return;
 	}
 
-	FGameplayEffectContextHandle EffectContext = Abilities->MakeEffectContext();
-	EffectContext.AddSourceObject(this);
-
-	UGameplayEffect* GameplayEffect = AttributeEffectClass->GetDefaultObject<UGameplayEffect>();
-
-	Abilities->ApplyGameplayEffectToSelf(GameplayEffect, DefaultLevel, EffectContext);
-
-	SetCharacterData(Asset->DefaultData);
+	InitCharacterData(Asset, Asset->GetDefaultData());
 }
 
-void ABaseCharacter::SetCharacterData(const FCharacterInstanceData& Data)
+void ABaseCharacter::InitCharacterDataDefaultById(const FRPGId& InId)
 {
-	if (auto* CharacterMesh = Data.CharacterMesh.LoadSynchronous())
+	URPGAssetLibrary::GetAssetByRPGIdAsync(InId, {}, [&](auto&& Result) {
+		this->InitCharacterDataDefault(Cast<UCharacterAsset>(Result));
+		});
+}
+
+void ABaseCharacter::InitAttributeWithGrowthCurve(const UCurveTable* CurveTable)
+{
+	if (!CurveTable)
 	{
-		GetMesh()->SetSkeletalMesh(CharacterMesh);
+		return;
 	}
 
-	AttributeSet->LoadAttributesFrom(Data);
+	UGameplayEffect* InitGE = NewObject<UGameplayEffect>(GetTransientPackage(), TEXT("InitAttributesGE"));
+	InitGE->DurationPolicy = EGameplayEffectDurationType::Instant;
 
-	CharacterData = Data;
+	for (const auto& Pair : CharacterSaveData.Attributes)
+	{ 
+		if (!CurveTable->FindCurve(FName(Pair.Key.AttributeName), ""))
+		{
+			continue;
+		}
+
+		FScalableFloat ScalableFloat(Pair.Value);
+		ScalableFloat.Curve.CurveTable = CurveTable;
+		ScalableFloat.Curve.RowName = FName(Pair.Key.AttributeName);
+
+		FGameplayModifierInfo Mod;
+		Mod.Attribute = Pair.Key;
+		Mod.ModifierOp = EGameplayModOp::Override;
+
+		Mod.ModifierMagnitude = FGameplayEffectModifierMagnitude(ScalableFloat);
+		InitGE->Modifiers.Add(Mod); 
+	}
+
+	float FinalLevel = 1.0f;
+	if (const float* FoundLevel = CharacterSaveData.Attributes.Find(ULevelAttributeSet::GetLevelAttribute()))
+	{
+		FinalLevel = *FoundLevel;
+	}
+
+	AbilitySystemComponent->ApplyGameplayEffectToSelf(InitGE, FinalLevel, AbilitySystemComponent->MakeEffectContext());
+}
+
+void ABaseCharacter::SetCharacterData(const FCharacterSaveData& Data)
+{
+	if (Data.CharacterMesh)
+	{
+		GetMesh()->SetSkeletalMesh(Data.CharacterMesh);
+	}
+
+	for (UAttributeSet* Set : AbilitySystemComponent->GetSpawnedAttributes())
+	{
+		if (URPGAttributeSet* RPGSet = Cast<URPGAttributeSet>(Set))
+		{
+			RPGSet->LoadAttributesFrom(Data);
+		}
+	}
+
+	CharacterSaveData = Data;
+}
+
+FCharacterSaveData ABaseCharacter::GetCharacterData()
+{
+	for (UAttributeSet* Set : AbilitySystemComponent->GetSpawnedAttributes())
+	{
+		if (URPGAttributeSet* RPGSet = Cast<URPGAttributeSet>(Set))
+		{
+			RPGSet->SaveAttributesTo(CharacterSaveData);
+		}
+	}
+
+	return CharacterSaveData;
 }

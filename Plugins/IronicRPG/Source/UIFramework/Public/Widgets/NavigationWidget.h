@@ -26,9 +26,9 @@ protected:
 	virtual void CollectNavigatableButtons(TMap<FIntPoint, UInteractiveWidget*>& OutButtons) PURE_VIRTUAL(UNavigationWidget::CollectNavigatableButtons, );
 
 protected:
-	// Grid buttons
+	// buttons
 	UPROPERTY(BlueprintReadWrite, Category = "Buttons")
-	TMap<FIntPoint, class UInteractiveWidget*> GridButtonMap;
+	TMap<FIntPoint, class UInteractiveWidget*> ButtonCoordMap;
 
 	// Current focus button
 	UPROPERTY(BlueprintReadWrite, Category = "Buttons")
@@ -70,11 +70,10 @@ public:
 	virtual bool Navigate(EUINavigation Direction) override;
 
 	// Confirm current button
-	virtual bool Confirm() override;
+	virtual bool Confirm_Implementation() override;
 
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
+	UFUNCTION(BlueprintCallable, BlueprintImplementableEvent)
 	void OnNavigate(FIntPoint CurrentCoord, FIntPoint LastCoord);
-	void OnNavigate_Implementation(FIntPoint CurrentCoord, FIntPoint LastCoord) {}
 
 protected: // Warp
 	UPROPERTY(EditDefaultsOnly, Category = "Navigation")

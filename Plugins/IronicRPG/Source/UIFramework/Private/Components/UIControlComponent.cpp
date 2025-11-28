@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Components/UIControlComponent.h"
@@ -10,14 +10,19 @@
 #include "Components/InputComponent.h"
 #include "EnhancedInputComponent.h"
 
-// Sets default values for this component's properties
-UUIControlComponent::UUIControlComponent()
+UUIControlComponent::UUIControlComponent(const FObjectInitializer& ObjectInitializer)
+	: Super(ObjectInitializer)
 {
-	// Set this component to be initialized when the game starts, and to be ticked every frame.  You can turn these features
-	// off to improve performance if you don't need them.
 	PrimaryComponentTick.bCanEverTick = true;
 
-	// ...
+	AllowedControlMode = ERPGControlMode::UI;
+}
+
+void UUIControlComponent::InitializeComponent()
+{
+	Super::InitializeComponent();
+
+
 }
 
 // Called when the game starts
@@ -31,38 +36,29 @@ void UUIControlComponent::BeginPlay()
 		UISubsystem = GI->GetSubsystem<UUISubsystem>();
 	}
 
-	// Find the input subsystem, and add the input mapping context
-	if (APlayerController* PC = Cast<APlayerController>(GetOwner()))
-	{
-		InputSubsystem = ULocalPlayer::GetSubsystem<UEnhancedInputLocalPlayerSubsystem>(PC->GetLocalPlayer());
-		if (InputSubsystem)
-		{
-			if (InputMapping)
-			{
-				InputSubsystem->AddMappingContext(InputMapping, 0);
-			}
-		}
+	check(UISubsystem);
 
-		// Bind input actions
-		if (UEnhancedInputComponent* InputComponent = CastChecked<UEnhancedInputComponent>(PC->InputComponent))
+	EnableAllInputs();
+
+	// Bind input actions
+	if (UEnhancedInputComponent* InputComponent = CastChecked<UEnhancedInputComponent>(Controller->InputComponent))
+	{
+		if (NavigateAction)
 		{
-			if (NavigateAction)
-			{
-				InputComponent->BindAction(NavigateAction, ETriggerEvent::Triggered, this, &UUIControlComponent::Navigate);
-				InputComponent->BindAction(NavigateAction, ETriggerEvent::Completed, this, &UUIControlComponent::StopNavigate);
-			}
-			if (SwitchUIPageAction)
-			{
-				InputComponent->BindAction(SwitchUIPageAction, ETriggerEvent::Triggered, this, &UUIControlComponent::SwitchUIPage);
-			}
-			if (ConfirmAction)
-			{
-				InputComponent->BindAction(ConfirmAction, ETriggerEvent::Started, this, &UUIControlComponent::Confirm);
-			}
-			if (CancelAction)
-			{
-				InputComponent->BindAction(CancelAction, ETriggerEvent::Started, this, &UUIControlComponent::Cancel);
-			}
+			InputComponent->BindAction(NavigateAction, ETriggerEvent::Triggered, this, &UUIControlComponent::Navigate);
+			InputComponent->BindAction(NavigateAction, ETriggerEvent::Completed, this, &UUIControlComponent::StopNavigate);
+		}
+		if (SwitchUIPageAction)
+		{
+			InputComponent->BindAction(SwitchUIPageAction, ETriggerEvent::Triggered, this, &UUIControlComponent::SwitchUIPage);
+		}
+		if (ConfirmAction)
+		{
+			InputComponent->BindAction(ConfirmAction, ETriggerEvent::Started, this, &UUIControlComponent::Confirm);
+		}
+		if (CancelAction)
+		{
+			InputComponent->BindAction(CancelAction, ETriggerEvent::Started, this, &UUIControlComponent::Cancel);
 		}
 	}
 }
@@ -85,6 +81,16 @@ void UUIControlComponent::TickComponent(float DeltaTime, ELevelTick TickType, FA
 	}
 }
 
+void UUIControlComponent::EnableAllInputs()
+{
+	EnableUIContext();
+}
+
+void UUIControlComponent::DisableAllInputs()
+{
+	DisableUIContext();
+}
+
 void UUIControlComponent::Navigate(const FInputActionValue& Value)
 {
 	if (!bCanNavigation)
@@ -96,33 +102,27 @@ void UUIControlComponent::Navigate(const FInputActionValue& Value)
 
 	// Get the top UI
 	bool bSuccess = false;
-	UWidgetBase* TopUI = GetTopUI();
-	if (TopUI && TopUI->Implements<UNavigationInterface>())
+	if (UWidgetBase * TopUI = GetTopUI())
 	{
-		if (INavigationInterface* NaviUI = Cast<INavigationInterface>(TopUI))
+		if (TopUI->Implements<UNavigationInterface>())
 		{
-			// Call the Navigate function on the top UI
-			if (Dir.X > 0.5f)
-				bSuccess = NaviUI->Navigate(EUINavigation::Right);
-			else if (Dir.X < -0.5f)
-				bSuccess = NaviUI->Navigate(EUINavigation::Left);
-			else if (Dir.Y > 0.5f)
-				bSuccess = NaviUI->Navigate(EUINavigation::Up);
-			else if (Dir.Y < -0.5f)
-				bSuccess = NaviUI->Navigate(EUINavigation::Down);
+			if (INavigationInterface* NaviUI = Cast<INavigationInterface>(TopUI))
+			{
+				// Call the Navigate function on the top UI
+				if (Dir.X > 0.5f)
+					bSuccess = NaviUI->Navigate(EUINavigation::Right);
+				else if (Dir.X < -0.5f)
+					bSuccess = NaviUI->Navigate(EUINavigation::Left);
+				else if (Dir.Y > 0.5f)
+					bSuccess = NaviUI->Navigate(EUINavigation::Up);
+				else if (Dir.Y < -0.5f)
+					bSuccess = NaviUI->Navigate(EUINavigation::Down);
+			}
 		}
 	}
 
-	if (bSuccess)
-	{
-		bCanNavigation = false;
-		bIsNavigating = true;
-	}
-	else
-	{
-		bCanNavigation = true;
-		bIsNavigating = false;
-	}
+	bCanNavigation = !bSuccess;
+	bIsNavigating = bSuccess;
 
 	CurrentNavigationTime = 0.0f;
 }

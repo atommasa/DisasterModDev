@@ -34,14 +34,15 @@ void UGridWidget::AddButton(FIntPoint Coord, UInteractiveWidget* Button)
         return;
     }
 
-    if (GridButtonMap.Contains(Coord))
+    if (ButtonCoordMap.Contains(Coord))
     {
         // Button already exists at this coordinate
-        GridButtonMap[Coord] = Button;
+        ButtonCoordMap[Coord]->RemoveFromParent();
+        ButtonCoordMap[Coord] = Button;
     }
     else
     {
-        GridButtonMap.Add(Coord, Button);
+        ButtonCoordMap.Add(Coord, Button);
     }
 
     GridPanel->AddChildToUniformGrid(Button, Coord.Y, Coord.X);
@@ -56,10 +57,10 @@ void UGridWidget::RemoveButton(FIntPoint Coord)
         return;
     }
 
-    if (GridButtonMap.Contains(Coord))
+    if (ButtonCoordMap.Contains(Coord))
     {
-        UInteractiveWidget* Button = GridButtonMap[Coord];
-        GridButtonMap.Remove(Coord);
+        UInteractiveWidget* Button = ButtonCoordMap[Coord];
+        ButtonCoordMap.Remove(Coord);
 
         if (Button)
         {

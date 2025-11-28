@@ -4,21 +4,10 @@
 #include "UISubsystem.h"
 #include "Widgets/WidgetBase.h"
 
-bool UUISubsystem::ShouldCreateSubsystem(UObject* Outer) const
-{
-	if (this->GetClass()->IsInBlueprint() && Super::ShouldCreateSubsystem(Outer))
-	{
-		return true;
-	}
-
-	return false;
-}
-
 void UUISubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	// Initialize the UIManager
-	
+
 }
 
 void UUISubsystem::Deinitialize()
@@ -27,15 +16,14 @@ void UUISubsystem::Deinitialize()
 	CloseAllUI();
 }
 
-void UUISubsystem::OpenUI(const FString UIName, const bool bHideLastUI)
+UWidgetBase* UUISubsystem::OpenUI(const FString UIName, const bool bHideLastUI)
 {
 	if (UIInfos.Contains(UIName))
 	{
 		TSubclassOf<UWidgetBase> WidgetClass = UIInfos[UIName];
 		if (WidgetClass)
 		{
-			UWidgetBase* NewUI = CreateWidget<UWidgetBase>(GetWorld(), WidgetClass);
-			if (NewUI)
+			if (UWidgetBase* NewUI = CreateWidget<UWidgetBase>(GetWorld(), WidgetClass))
 			{
 				// If we are hiding the last UI, set its visibility to hidden
 				if (bHideLastUI && !IsUIStackEmpty())
@@ -49,10 +37,41 @@ void UUISubsystem::OpenUI(const FString UIName, const bool bHideLastUI)
 
 				NewUI->AddToViewport();
 				UIStack.Push(NewUI);
-				SetInputModeForUI(NewUI);
+				// SetInputModeForUI(NewUI);
+
+				return NewUI;
 			}
 		}
 	}
+
+	return nullptr;
+}
+
+UWidgetBase* UUISubsystem::OpenUIByClass(TSubclassOf<UWidgetBase> UIClass, const bool bHideLastUI)
+{
+	if (UIClass)
+	{
+		if (UWidgetBase* NewUI = CreateWidget<UWidgetBase>(GetWorld(), UIClass))
+		{
+			// If we are hiding the last UI, set its visibility to hidden
+			if (bHideLastUI && !IsUIStackEmpty())
+			{
+				UWidgetBase* LastUI = UIStack.Top();
+				if (LastUI)
+				{
+					LastUI->SetVisibility(ESlateVisibility::Hidden);
+				}
+			}
+
+			NewUI->AddToViewport();
+			UIStack.Push(NewUI);
+			// SetInputModeForUI(NewUI);
+
+			return NewUI;
+		}
+	}
+
+	return nullptr;
 }
 
 void UUISubsystem::CloseUI()
@@ -73,12 +92,12 @@ void UUISubsystem::CloseUI()
 		if (NewTopUI)
 		{
 			NewTopUI->SetVisibility(ESlateVisibility::Visible);
-			SetInputModeForUI(NewTopUI);
+			// SetInputModeForUI(NewTopUI);
 		}
 	}
 	else
 	{
-		RessetInputMode();
+		// RessetInputMode();
 	}
 }
 

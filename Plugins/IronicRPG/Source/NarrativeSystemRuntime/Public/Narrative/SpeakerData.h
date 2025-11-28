@@ -6,7 +6,7 @@
 #include "DataTypes/RPGId.h"
 #include "SpeakerData.generated.h"
 
-class UCharacterPrimaryAsset;
+class UCharacterAsset;
 
 /**
  * 
@@ -26,7 +26,7 @@ public:
 	FRPGId SpeakerId;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker")
-	TSoftObjectPtr<UCharacterPrimaryAsset> SpeakerAsset;
+	TSoftObjectPtr<UCharacterAsset> SpeakerAsset;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker")
 	FColor SpeakerNodeColor = FColor::Silver;

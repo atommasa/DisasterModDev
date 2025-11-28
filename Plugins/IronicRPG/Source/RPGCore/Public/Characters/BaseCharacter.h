@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
@@ -8,12 +8,12 @@
 #include "Characters/CharacterDataTypes.h"
 #include "BaseCharacter.generated.h"
 
-class UCharacterPrimaryAsset;
+class UCharacterAsset;
 
 class UInputComponent;
 
-class UCharacterAbilitySystemComponent;
-class UCharacterAttributeSet;
+class URPGAbilitySystemComponent;
+class URPGAttributeSet;
 
 class AAIController;
 class UNavigationInvokerComponent;
@@ -32,6 +32,8 @@ protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
 
+	virtual void PostInitializeComponents() override;
+
 public:	
 	// Called every frame
 	virtual void Tick(float DeltaTime) override;
@@ -47,8 +49,9 @@ protected: // Character Data
 	UPROPERTY(BlueprintReadOnly, Category = "Character Data")
 	FRPGId Id;
 
+	// The save data of this character, but it is not "Authority Data", so we recommend that you only use it for loading and saving
 	UPROPERTY(BlueprintReadOnly, Category = "Character Data")
-	FCharacterInstanceData CharacterData;
+	FCharacterSaveData CharacterSaveData;
 
 public: // AI Control
 	UFUNCTION(BlueprintCallable, Category = "AI Control")
@@ -79,14 +82,32 @@ public: // Navigation
 	TObjectPtr<UNavigationInvokerComponent> NavigationInvoker;
 
 public: // Gameplay Ability System
-	UPROPERTY(BlueprintReadOnly, Category = "Ability System")
-	UCharacterAbilitySystemComponent* Abilities;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Ability System")
+	URPGAbilitySystemComponent* AbilitySystemComponent;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes")
-	UCharacterAttributeSet* AttributeSet;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Attributes")
+	TArray<TSubclassOf<URPGAttributeSet>> AttributeSets;
 
 public:
-	void InitDefaultData(UCharacterPrimaryAsset* Asset);
-	void SetCharacterData(const FCharacterInstanceData& Data);
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	virtual void InitCharacterData(const UCharacterAsset* Asset, const FCharacterSaveData& Data);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void InitCharacterDataById(const FRPGId& InId, const FCharacterSaveData& Data);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void InitCharacterDataDefault(const UCharacterAsset* Asset);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	void InitCharacterDataDefaultById(const FRPGId& InId);
+
+	UFUNCTION(BlueprintCallable, Category = "Character Data")
+	virtual void InitAttributeWithGrowthCurve(const UCurveTable* CurveTable);
+
+	// Set the character data for this character
+	virtual void SetCharacterData(const FCharacterSaveData& Data);
+
+	// Get the character data for this character
+	virtual FCharacterSaveData GetCharacterData();
 
 };

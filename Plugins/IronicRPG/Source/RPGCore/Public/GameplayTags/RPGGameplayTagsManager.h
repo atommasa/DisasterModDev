@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
@@ -7,7 +7,7 @@
 #include "RPGGameplayTagsManager.generated.h"
 
 /**
- * 
+ * Asset manager class to manage RPG gameplay tags.
  */
 UCLASS()
 class RPGCORE_API URPGGameplayTagsManager : public UAssetManager

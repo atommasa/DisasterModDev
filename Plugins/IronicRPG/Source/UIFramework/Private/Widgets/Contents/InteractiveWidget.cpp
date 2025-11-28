@@ -5,27 +5,21 @@
 #include "Kismet/GameplayStatics.h"
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
+#include "Components/RichTextBlock.h"
 #include "Animation/WidgetAnimation.h"
 
 void UInteractiveWidget::NativePreConstruct()
 {
     Super::NativePreConstruct();
 
-	// Set the text for the content text block if it is valid
     if (ContentText)
     {
-        ContentText->SetText(Text);
+        ContentText->SetText(DefaultButtonText);
     }
 
-	// Apply the materials to the images if they are valid
-    if (IconImage && IconMaterial)
+    if (ContentRichText)
     {
-        IconImage->SetBrushFromMaterial(IconMaterial);
-    }
-
-    if (BackgroundImage && BackgroundMaterial)
-    {
-        BackgroundImage->SetBrushFromMaterial(BackgroundMaterial);
+        ContentRichText->SetText(DefaultButtonText);
     }
 }
 
@@ -128,16 +122,4 @@ void UInteractiveWidget::ResetAnimation()
     }
 
     UE_LOG(LogTemp, Warning, TEXT("%s reset animation successfully"), *GetName());
-}
-
-void UInteractiveWidget::SetContentText(const FText& NewText)
-{
-	if (ContentText)
-	{
-		ContentText->SetText(NewText);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Warning, TEXT("ContentText is not bound in %s"), *GetName());
-	}
 }

@@ -3,7 +3,7 @@
 
 #include "Characters/PlayableCharacter.h"
 #include "Camera/CameraComponent.h"
-#include "GameFramework/SpringArmComponent.h"
+#include "Camera/RPGSpringArmComponent.h"
 
 APlayableCharacter::APlayableCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
@@ -13,7 +13,7 @@ APlayableCharacter::APlayableCharacter(const FObjectInitializer& ObjectInitializ
 	bUseControllerRotationRoll = false;
 
 	constexpr float TargetArmLength = 500.f;
-	CameraBoom = CreateDefaultSubobject<USpringArmComponent>("CameraBoom");
+	CameraBoom = CreateDefaultSubobject<URPGSpringArmComponent>("CameraBoom");
 	CameraBoom->SetupAttachment(RootComponent);
 	CameraBoom->TargetArmLength = TargetArmLength;
 	CameraBoom->bDoCollisionTest = true;
@@ -23,3 +23,4 @@ APlayableCharacter::APlayableCharacter(const FObjectInitializer& ObjectInitializ
 	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName);
 
 }
+

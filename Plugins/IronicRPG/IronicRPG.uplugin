@@ -26,8 +26,8 @@
 			"LoadingPhase": "Default"
 		},
 		{
-			"Name": "RPGEditor",
-			"Type": "Editor",
+			"Name": "GameFramework",
+			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		},
 		{
@@ -41,7 +41,27 @@
 			"LoadingPhase": "Default"
 		},
 		{
+			"Name": "LoadingScreen",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
 			"Name": "CharacterSystem",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "GameZoneSystem",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "AbilitySystem",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "CombatSystem",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		},
@@ -57,6 +77,21 @@
 		},
 		{
 			"Name": "NarrativeSystemRuntime",
+			"Type": "Runtime",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RPGEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RPGCheatEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RPGCheatRuntime",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		},

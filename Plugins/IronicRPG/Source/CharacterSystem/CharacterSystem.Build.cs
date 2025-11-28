@@ -31,6 +31,10 @@ public class CharacterSystem : ModuleRules
                 "GameplayAbilities",
                 "GameplayTags",
                 "GameplayTasks",
+				"GameFramework",
+                "SaveSystem",
+				"RPGAI",
+				"RPGCheatRuntime",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);
