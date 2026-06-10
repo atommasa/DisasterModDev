@@ -178,7 +178,7 @@ UEdGraphNode* FNewNodeAction::PerformAction(UEdGraph* ParentGraph, UEdGraphPin* 
 		// If the from pin is not null, connect them
 		if (FromPin)
 		{
-			DialogueGraphNode->GetSchema()->TryCreateConnection(FromPin, InputPin);
+		DialogueNodeInfo->SpeakerName = SpeakerData.GetSpeakerDisplayName();
 		}
 
 		ParentGraph->Modify();
