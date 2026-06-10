@@ -106,7 +106,7 @@ void UNarrativeGraphSchema::GetGraphContextActions(FGraphContextMenuBuilder& Con
 	TSharedPtr<FNewNodeAction> NewRerouteNodeAction =
 		MakeShareable(new FNewNodeAction
 		(
-			FText::FromString(TEXT("")),
+			FText(),
 			NSLOCTEXT("NarrativeEditor", "AddRerouteNode", "Add reroute node"),
 			NSLOCTEXT("NarrativeEditor", "AddRerouteNodeTooltip", "Makes a new reroute node"),
 			UNarrativeNodeKnot::StaticClass()
