@@ -26,10 +26,6 @@ protected:
 	virtual void Deinitialize() override;
 
 public:
-	UFUNCTION(BlueprintCallable, BlueprintNativeEvent)
-	void StartupSubsystem();
-
-public:
 	// Enters a game zone with the specified context.
 	void EnterGameZone(const FGameZoneContext& NewGameZoneContext, TDelegate<void()> DelegateToCall = TDelegate<void()>());
 
@@ -41,6 +37,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "GameZone")
 	FGameZoneContext GetCurrentContext() const { return CurrentContext; }
 
+	// Only used for loading the player start point when loading a game, it will find the player start point based on the current context and return its transform
+	UFUNCTION(BlueprintCallable, Category = "GameZone")
+	FTransform GetSaveGameTransform() const; // TODO: API 要不要改名字，或者嘗試新增 API
+
 	UFUNCTION(BlueprintCallable, Category = "GameZone")
 	class UGameZoneAsset* FindZoneAssetForCurrentMap() const;
 
@@ -50,8 +50,9 @@ private:
 
 	ULevelStreaming* CurrentStreaming;
 
-public:
 	FGameZoneContext CurrentContext;
+
+	FGameZoneContext PendingContext;
 
 public: // ISaveable
 	virtual FName GetSaveModuleType() const override;

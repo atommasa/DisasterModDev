@@ -2,14 +2,18 @@
 
 
 #include "CharacterSaveDataCustomization.h"
+#include "PropertyCustomizationHelpers.h"
 #include "DetailWidgetRow.h"
 #include "IDetailGroup.h"
 #include "IDetailChildrenBuilder.h"
 
 #include "Widgets/Input/SNumericEntryBox.h"
 
+#include "RPGSettings.h"
+
 #include "Characters/CharacterDataTypes.h"
-#include "Characters/Attributes/RPGAttributeSet.h"
+#include "Assets/RPGAssetManager.h"
+#include "Abilities/AbilityAsset.h"
 
 #include "RPGEditor.h"
 
@@ -42,9 +46,22 @@ void FCharacterSaveDataCustomization::CustomizeChildren(TSharedRef<IPropertyHand
         TSharedPtr<IPropertyHandle> ChildHandle = PropertyHandle->GetChildHandle(i);
         if (ChildHandle.IsValid())
         {
-            if (ChildHandle->GetProperty()->GetFName() == GET_MEMBER_NAME_CHECKED(FCharacterSaveData, Attributes))
+            if (ChildHandle->GetProperty()->GetFName() == GET_MEMBER_NAME_CHECKED(FCharacterSaveData, LearnedAbilities))
             {
-				CostomizeAttributeSection(ChildBuilder, ChildHandle.ToSharedRef());
+				LearnedAbilitiesHandle = ChildHandle;
+            }
+            else if (ChildHandle->GetProperty()->GetFName() == GET_MEMBER_NAME_CHECKED(FCharacterSaveData, EquippedAbilities))
+            {
+				EquippedAbilitiesHandle = ChildHandle;
+
+                // Customize Equipped Abilities Section
+                CostomizeEquippedAbilitiesSection(ChildBuilder);
+
+				continue;
+            }
+            else if (ChildHandle->GetProperty()->GetFName() == GET_MEMBER_NAME_CHECKED(FCharacterSaveData, Attributes))
+            {
+				CostomizeAttributesSection(ChildBuilder, ChildHandle.ToSharedRef());
                 continue;
 			}
 
@@ -53,46 +70,258 @@ void FCharacterSaveDataCustomization::CustomizeChildren(TSharedRef<IPropertyHand
     }
 }
 
-void FCharacterSaveDataCustomization::CostomizeAttributeSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle)
+void FCharacterSaveDataCustomization::UpdateLearnedOptions()
+{
+    if (!LearnedAbilitiesHandle.IsValid() || !LearnedAbilitiesHandle->IsValidHandle())
+    {
+        return;
+    }
+
+    LearnedOptions.Reset();
+
+    uint32 Num = 0;
+    LearnedAbilitiesHandle->GetNumChildren(Num);
+    
+    for (uint32 i = 0; i < Num; ++i)
+    {
+        TSharedPtr<IPropertyHandle> AbilityDataHandle = LearnedAbilitiesHandle->GetChildHandle(i);
+        if (!AbilityDataHandle.IsValid())
+        {
+            continue;
+        }
+
+        TSharedPtr<IPropertyHandle> AbilityIdHandle = AbilityDataHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FAbilityData, AbilityId));
+        if (!AbilityIdHandle.IsValid())
+        {
+            continue;
+        }
+
+		FRPGId IdValue;
+        void* ValuePtr = nullptr;
+        if (AbilityIdHandle->GetValueData(ValuePtr) == FPropertyAccess::Success && ValuePtr)
+        {
+            IdValue = *static_cast<FRPGId*>(ValuePtr);
+        }
+
+		LearnedOptions.Add(MakeShared<FRPGId>(IdValue));
+    }
+}
+
+void FCharacterSaveDataCustomization::CostomizeEquippedAbilitiesSection(IDetailChildrenBuilder& ChildBuilder)
+{
+    if (!EquippedAbilitiesHandle.IsValid() || !EquippedAbilitiesHandle->IsValidHandle())
+    {
+        return;
+    }
+
+    const URPGSettings* RPGSettings = URPGSettings::GetRPGSettings();
+    check(RPGSettings);
+
+    const UEnum* AbilitySlotEnum = Cast<UEnum>(RPGSettings->AbilityInputEnum.TryLoad());
+	if (!AbilitySlotEnum)
+    {
+		UE_LOG(LogTemp, Warning, TEXT("[FCharacterSaveDataCustomization::CostomizeEquippedAbilitiesSection] Failed to load Ability Input Enum."));
+        return;
+	}
+
+	const int32 MaxSlots = AbilitySlotEnum->NumEnums() - 1; // Need to exclude the _MAX entry
+
+    TSharedPtr<IPropertyHandleMap> Map = EquippedAbilitiesHandle->AsMap();
+    if (!Map.IsValid())
+    {
+        return;
+    }
+
+	// Ensure all slots exist
+    TSet<int32> ExistingKeys;
+    {
+        uint32 Num = 0;
+        Map->GetNumElements(Num);
+
+        for (uint32 i = 0; i < Num; ++i)
+        {
+            TSharedRef<IPropertyHandle> Element = Map->GetElement(i);
+            TSharedPtr<IPropertyHandle> KeyHandle = Element->GetKeyHandle();
+            int32 Key = INDEX_NONE;
+
+            if (KeyHandle.IsValid() && KeyHandle->GetValue(Key) == FPropertyAccess::Success)
+            {
+                ExistingKeys.Add(Key);
+            }
+        }
+    }
+
+    for (int32 SlotKey = 0; SlotKey < MaxSlots; ++SlotKey)
+    {
+        if (ExistingKeys.Contains(SlotKey))
+        {
+            continue;
+        }
+
+        Map->AddItem();
+
+        uint32 Num = 0;
+        Map->GetNumElements(Num);
+        TSharedRef<IPropertyHandle> NewElement = Map->GetElement(Num - 1);
+
+        if (TSharedPtr<IPropertyHandle> KeyHandle = NewElement->GetKeyHandle())
+        {
+            KeyHandle->SetValue(SlotKey + 1);
+        }
+    }
+
+    for (int32 SlotKey = 0; SlotKey < MaxSlots; ++SlotKey)
+    {
+        TSharedRef<IPropertyHandle> ExistingElement = Map->GetElement(SlotKey);
+
+        if (TSharedPtr<IPropertyHandle> KeyHandle = ExistingElement->GetKeyHandle())
+        {
+            KeyHandle->SetValue(SlotKey);
+		}
+    }
+
+	// Now build UI
+    IDetailGroup& Group = ChildBuilder.AddGroup(
+        GET_MEMBER_NAME_CHECKED(FCharacterSaveData, EquippedAbilities),
+        FText::FromString("Default Equipped Abilities"),
+        true);
+
+    for (int32 SlotIndex = 0; SlotIndex < MaxSlots; ++SlotIndex)
+    {
+        TSharedPtr<IPropertyHandle> ValueHandle;
+        {
+            uint32 Num = 0;
+            Map->GetNumElements(Num);
+            for (uint32 i = 0; i < Num; ++i)
+            {
+                TSharedRef<IPropertyHandle> Element = Map->GetElement(i);
+                TSharedPtr<IPropertyHandle> KeyHandle = Element->GetKeyHandle();
+
+                int32 Key = INDEX_NONE;
+                if (KeyHandle.IsValid() && KeyHandle->GetValue(Key) == FPropertyAccess::Success && Key == SlotIndex)
+                {
+                    ValueHandle = Element;
+                    break;
+                }
+            }
+        }
+
+        if (!ValueHandle.IsValid())
+        {
+            continue;
+        }
+
+		// Get Id Handle
+        TSharedPtr<IPropertyHandle> IdHandle = ValueHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FRPGId, Id));
+        if (!IdHandle.IsValid())
+        {
+            continue;
+        }
+
+        Group.AddWidgetRow()
+            .NameContent()
+            [
+                SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("Ability Slot: %s"), *AbilitySlotEnum->GetDisplayNameTextByIndex(SlotIndex).ToString())))
+            ]
+            .ValueContent()
+            .MinDesiredWidth(450.f)
+            [
+                SNew(SObjectPropertyEntryBox)
+                    .AllowedClass(UAbilityAsset::StaticClass())
+
+                    .ObjectPath_Lambda([IdHandle]() -> FString
+                        {
+                            FName IdName;
+                            if (IdHandle->GetValue(IdName) != FPropertyAccess::Success || IdName.IsNone())
+                            {
+                                return TEXT("");
+                            }
+
+                            const FPrimaryAssetId AssetId(TEXT("Ability"), IdName);
+
+                            const FSoftObjectPath Path = UAssetManager::Get().GetPrimaryAssetPath(AssetId);
+                            return Path.IsValid() ? Path.ToString() : TEXT("");
+                        })
+
+                    .OnObjectChanged_Lambda([IdHandle](const FAssetData& SelectedAsset)
+                        {
+                            if (!IdHandle.IsValid())
+                            {
+                                return;
+                            }
+
+                            if (!SelectedAsset.IsValid())
+                            {
+                                IdHandle->SetValue(NAME_None);
+                                return;
+                            }
+
+                            const FPrimaryAssetId AssetId = SelectedAsset.GetPrimaryAssetId();
+                            if (!AssetId.IsValid())
+                            {
+                                return;
+                            }
+
+                            const FName NewName = AssetId.PrimaryAssetName;
+                            IdHandle->SetValue(NewName);
+                        })
+
+                    .OnShouldFilterAsset_Lambda([this](const FAssetData& AssetData)
+                        {
+                            UpdateLearnedOptions();
+
+                            const FPrimaryAssetId FoundId = AssetData.GetPrimaryAssetId();
+                            if (!FoundId.IsValid())
+                            {
+                                return true;
+                            }
+
+                            const FRPGId Target = FRPGId(FoundId.PrimaryAssetName);
+                            return !LearnedOptions.ContainsByPredicate(
+                                [&Target](const TSharedPtr<FRPGId>& P) { return P.IsValid() && *P == Target; }
+                            );
+                        })
+            ];
+    }
+}
+
+void FCharacterSaveDataCustomization::CostomizeAttributesSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle)
 {
     TArray<UClass*> Classes;
     GetDerivedClasses(URPGAttributeSet::StaticClass(), Classes);
 
-    IDetailGroup& AttributesGroup = ChildBuilder.AddGroup(GET_MEMBER_NAME_CHECKED(FCharacterSaveData, Attributes), FText::FromString("Attributes (Default Attributes)"), true);
+    IDetailGroup& AttributesGroup = ChildBuilder.AddGroup(GET_MEMBER_NAME_CHECKED(FCharacterSaveData, Attributes), FText::FromString("Default Attributes"), true);
 
     for (UClass* Class : Classes)
     {
         IDetailGroup& Group = AttributesGroup.AddGroup(Class->GetFName(), FText::FromName(Class->GetFName()), true);
 
-        for (TFieldIterator<FProperty> It(Class); It; ++It)
+        if (URPGAttributeSet* AttributeSet = Class->GetDefaultObject<URPGAttributeSet>())
         {
-            if (FStructProperty* StructProp = CastField<FStructProperty>(*It))
+            for (const FGameplayAttribute& Attribute : AttributeSet->GetSaveableAttributes())
             {
-                // Collect attributes marked with SaveGame meta tag
-                if (StructProp->Struct == FGameplayAttributeData::StaticStruct() && StructProp->HasMetaData(ATTRIBUTE_METATAG_SaveGame))
-                {
-                    Group.AddWidgetRow()
-                        .NameContent()
-                        [
-                            SNew(STextBlock)
-                            .Text(FText::FromName(StructProp->GetFName()))
-						]
-                        .ValueContent()
-                        [
-                            GenerateAttributeEntryBox(StructProp).ToSharedRef()
-                        ];
-                }
+                Group.AddWidgetRow()
+                    .NameContent()
+                    [
+                        SNew(STextBlock)
+                            .Text(FText::FromString(Attribute.AttributeName))
+                    ]
+                    .ValueContent()
+                    [
+                        GenerateAttributeEntryBox(Attribute).ToSharedRef()
+                    ];
             }
         }
     }
 }
 
-TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateMaxValueButton(FStructProperty* StructProp)
+TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateMaxValueButton(const FGameplayAttribute& Attribute)
 {
-    if (!StructProp->HasMetaData(ATTRIBUTE_METATAG_AttributeClampMax))
+    const FString& MaxAttributeName = URPGAttributeSet::GetMaxClampAttributeFor(Attribute).AttributeName;
+    if (MaxAttributeName.IsEmpty())
     {
-		return SNullWidget::NullWidget;
-    }
+        return SNullWidget::NullWidget;
+	}
 
     return SNew(SButton)
 		.ButtonStyle(FAppStyle::Get(), "NoBorder")
@@ -100,11 +329,10 @@ TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateMaxValueButton(FStr
         .ContentPadding(FMargin(2.0f, 0.0f))
         .VAlign(VAlign_Center)
         .HAlign(HAlign_Left)
-		.OnClicked_Lambda([this, StructProp]() -> FReply {
-        const FString& MaxValueProp = StructProp->GetMetaData(ATTRIBUTE_METATAG_AttributeClampMax);
-            if (!MaxValueProp.IsEmpty())
+		.OnClicked_Lambda([this, Attribute, MaxAttributeName]() -> FReply {
+            if (!MaxAttributeName.IsEmpty())
             {
-                FName MaxAttrName(*MaxValueProp);
+                FName MaxAttrName(*MaxAttributeName);
                 TArray<void*> RawData;
                 Handler->AccessRawData(RawData);
                 if (RawData.Num() > 0)
@@ -121,7 +349,7 @@ TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateMaxValueButton(FStr
                                 {
                                     if (FCharacterSaveData* InnerSaveData = reinterpret_cast<FCharacterSaveData*>(DataPtr))
                                     {
-                                        InnerSaveData->Attributes.FindOrAdd(FGameplayAttribute(StructProp)) = Pair.Value;
+                                        InnerSaveData->Attributes.FindOrAdd(Attribute) = Pair.Value;
                                     }
                                 }
                                 Handler->NotifyPostChange(EPropertyChangeType::ValueSet);
@@ -140,9 +368,9 @@ TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateMaxValueButton(FStr
 		];
 }
 
-TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateAttributeEntryBox(FStructProperty* StructProp)
+TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateAttributeEntryBox(const FGameplayAttribute& Attribute)
 {
-    FGameplayAttribute Attribute(StructProp);
+    const FString& MaxAttributeName = URPGAttributeSet::GetMaxClampAttributeFor(Attribute).AttributeName;
 
     TArray<void*> RawData;
     Handler->AccessRawData(RawData);
@@ -155,7 +383,7 @@ TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateAttributeEntryBox(F
             [
                 SNew(SNumericEntryBox<float>)
                     .MinDesiredValueWidth(50.0f)
-                    .Value_Lambda([this, StructProp, Attribute]() -> TOptional<float> {
+                    .Value_Lambda([this, Attribute]() -> TOptional<float> {
                     TArray<void*> RawData;
                     Handler->AccessRawData(RawData);
                     if (RawData.Num() > 0)
@@ -166,7 +394,7 @@ TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateAttributeEntryBox(F
                             {
                                 return *Found;
                             }
-                            else if (URPGAttributeSet* AttributeSet = Cast<URPGAttributeSet>(StructProp->GetOwnerClass()->GetDefaultObject()))
+                            else if (URPGAttributeSet* AttributeSet = Attribute.GetAttributeSetClass()->GetDefaultObject<URPGAttributeSet>())
                             {
 							    // Use default value from attribute set
                                 float DefaultValue = Attribute.GetNumericValue(AttributeSet);
@@ -179,12 +407,12 @@ TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateAttributeEntryBox(F
 
                     return TOptional<float>();
                 })
-                    .OnValueCommitted_Lambda([this, StructProp, Attribute](float NewValue, ETextCommit::Type CommitType) {
+                    .OnValueCommitted_Lambda([this, Attribute, MaxAttributeName](float NewValue, ETextCommit::Type CommitType) {
                     float ClampedValue = NewValue;
-                    const FString& MaxValueProp = StructProp->GetMetaData(ATTRIBUTE_METATAG_AttributeClampMax);
-                    if (!MaxValueProp.IsEmpty())
+                    
+                    if (!MaxAttributeName.IsEmpty())
                     {
-                        FName MaxAttrName(*MaxValueProp);
+                        FName MaxAttrName(*MaxAttributeName);
 
                         TArray<void*> RawData;
                         Handler->AccessRawData(RawData);
@@ -226,6 +454,6 @@ TSharedPtr<SWidget> FCharacterSaveDataCustomization::GenerateAttributeEntryBox(F
             .VAlign(VAlign_Center)
             .HAlign(HAlign_Left)
             [
-                GenerateMaxValueButton(StructProp).ToSharedRef()
+                GenerateMaxValueButton(Attribute).ToSharedRef()
 			];
 }

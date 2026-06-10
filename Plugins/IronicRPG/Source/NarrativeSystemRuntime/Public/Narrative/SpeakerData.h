@@ -1,12 +1,27 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "DataTypes/RPGId.h"
+#include "GameplayTagContainer.h"
 #include "SpeakerData.generated.h"
 
-class UCharacterAsset;
+UENUM(BlueprintType)
+enum class ESpeakerSource : uint8
+{
+	// The speaker is defined by a specific CharacterId.
+	CharacterId UMETA(DisplayName = "Character ID"),
+
+	// The speaker is defined by a specific literal name.
+	LiteralName UMETA(DisplayName = "Literal Name"),
+
+	// The speaker is defined by a specific tag.
+	SpeakerTag UMETA(DisplayName = "Speaker Tag"),
+
+	// The speaker is defined by a reference to an actor in the world.
+	ActorReference UMETA(DisplayName = "Actor Reference"),
+};
 
 /**
  * 
@@ -23,11 +38,23 @@ public:
 		: SpeakerId(InSpeakerId) {};
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker")
+	ESpeakerSource SpeakerSource = ESpeakerSource::CharacterId;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker", meta=(Type = "Character", EditCondition = "SpeakerSource == ESpeakerSource::CharacterId", EditConditionHides))
 	FRPGId SpeakerId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker")
-	TSoftObjectPtr<UCharacterAsset> SpeakerAsset;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker", meta=(EditCondition = "SpeakerSource != ESpeakerSource::CharacterId", EditConditionHides))
+	FText SpeakerName;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker", meta=(EditCondition = "SpeakerSource == ESpeakerSource::SpeakerTag", EditConditionHides))
+	FGameplayTag SpeakerTag;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker", meta=(EditCondition = "SpeakerSource == ESpeakerSource::ActorReference", EditConditionHides))
+	TSoftObjectPtr<AActor> SpeakerActor;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speaker")
 	FColor SpeakerNodeColor = FColor::Silver;
+
+public:
+	FText GetSpeakerDisplayName() const;
 };

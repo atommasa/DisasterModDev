@@ -1,15 +1,15 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Assets/NarrativeAssetFactory.h"
 #include "Assets/NarrativeAssetAction.h"
-#include "Narrative/NarrativeEventBlueprintBase.h"
+#include "Narrative/Dialogue.h"
 #include "NarrativeAsset.h"
 #include "Kismet2/KismetEditorUtilities.h"
-#include <Kismet2/BlueprintEditorUtils.h>
-#include <NarrativeGraphSchema.h>
-#include <KismetCompilerModule.h>
-#include "Blueprint/DialogueBlueprintGeneratedClass.h"
+#include "Kismet2/BlueprintEditorUtils.h"
+#include "NarrativeGraphSchema.h"
+#include "KismetCompilerModule.h"
+#include "Blueprints/DialogueBlueprintGeneratedClass.h"
 #include "NarrativeEventGraphSchema.h"
 
 UNarrativeBlueprintFactory::UNarrativeBlueprintFactory()
@@ -34,8 +34,11 @@ UObject* UNarrativeBlueprintFactory::FactoryCreateNew(UClass* Class, UObject* In
         InParent,
         Name,
         BPTYPE_Normal,
+        UDialogueBlueprint::StaticClass(),
+        UDialogueBlueprintGeneratedClass::StaticClass(),
         CallingContext
     );
+
     
     if (!NewBP)
     {

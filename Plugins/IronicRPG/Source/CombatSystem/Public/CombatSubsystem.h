@@ -17,7 +17,11 @@ class COMBATSYSTEM_API UCombatSubsystem : public UWorldSubsystem
 protected:
 	virtual void Initialize(FSubsystemCollectionBase& Collection) override;
 	virtual void Deinitialize() override;
-	
+
+private:
+	UFUNCTION()
+	void AssignTeamTagToActor(AActor* Actor);
+
 public:
 	/*UFUNCTION(BlueprintCallable)
 	void StartCombat(const TArray<ACharacter*>& Enemies);*/

@@ -29,100 +29,100 @@ void URPGPrimaryAsset::UpdateAssetBundleData()
 {
 	Super::UpdateAssetBundleData();
 
-	for (TFieldIterator<FProperty> PropIt(GetClass()); PropIt; ++PropIt)
-	{
-		FProperty* Property = *PropIt;
-		
-		if (!Property->HasMetaData(TEXT("AssetBundles")))
-		{
-			continue;
-		}
+	//for (TFieldIterator<FProperty> PropIt(GetClass()); PropIt; ++PropIt)
+	//{
+	//	FProperty* Property = *PropIt;
+	//	
+	//	if (!Property->HasMetaData(TEXT("AssetBundles")))
+	//	{
+	//		continue;
+	//	}
 
-		if (FStructProperty* StructProp = CastField<FStructProperty>(Property))
-		{
-			void* StructPtr = StructProp->ContainerPtrToValuePtr<void>(this);
+	//	if (FStructProperty* StructProp = CastField<FStructProperty>(Property))
+	//	{
+	//		void* StructPtr = StructProp->ContainerPtrToValuePtr<void>(this);
 
-			AddStructSoftObjectToBundle(
-				*Property->GetMetaData(TEXT("AssetBundles")),
-				StructPtr,
-				StructProp->Struct
-			);
-		}
-		else if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Property))
-		{
-			FScriptArrayHelper ArrayHelper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(this));
-			FProperty* ElementProp = ArrayProp->Inner;
+	//		AddStructSoftObjectToBundle(
+	//			*Property->GetMetaData(TEXT("AssetBundles")),
+	//			StructPtr,
+	//			StructProp->Struct
+	//		);
+	//	}
+	//	else if (FArrayProperty* ArrayProp = CastField<FArrayProperty>(Property))
+	//	{
+	//		FScriptArrayHelper ArrayHelper(ArrayProp, ArrayProp->ContainerPtrToValuePtr<void>(this));
+	//		FProperty* ElementProp = ArrayProp->Inner;
 
-			if (FStructProperty* ElementStruct = CastField<FStructProperty>(ElementProp))
-			{
-				for (int32 i = 0; i < ArrayHelper.Num(); ++i)
-				{
-					void* ElementPtr = ArrayHelper.GetRawPtr(i);
+	//		if (FStructProperty* ElementStruct = CastField<FStructProperty>(ElementProp))
+	//		{
+	//			for (int32 i = 0; i < ArrayHelper.Num(); ++i)
+	//			{
+	//				void* ElementPtr = ArrayHelper.GetRawPtr(i);
 
-					AddStructSoftObjectToBundle(
-						*Property->GetMetaData(TEXT("AssetBundles")),
-						ElementPtr,
-						ElementStruct->Struct
-					);
-				}
-			}
-		}
-		else if (FSetProperty* SetProp = CastField<FSetProperty>(Property))
-		{
-			FScriptSetHelper SetHelper(SetProp, SetProp->ContainerPtrToValuePtr<void>(this));
-			FProperty* ElementProp = SetProp->ElementProp;
+	//				AddStructSoftObjectToBundle(
+	//					*Property->GetMetaData(TEXT("AssetBundles")),
+	//					ElementPtr,
+	//					ElementStruct->Struct
+	//				);
+	//			}
+	//		}
+	//	}
+	//	else if (FSetProperty* SetProp = CastField<FSetProperty>(Property))
+	//	{
+	//		FScriptSetHelper SetHelper(SetProp, SetProp->ContainerPtrToValuePtr<void>(this));
+	//		FProperty* ElementProp = SetProp->ElementProp;
 
-			if (FStructProperty* ElementStruct = CastField<FStructProperty>(ElementProp))
-			{
-				for (int32 i = 0; i < SetHelper.GetMaxIndex(); ++i)
-				{
-					void* ElementPtr = SetHelper.GetElementPtr(i);
+	//		if (FStructProperty* ElementStruct = CastField<FStructProperty>(ElementProp))
+	//		{
+	//			for (int32 i = 0; i < SetHelper.GetMaxIndex(); ++i)
+	//			{
+	//				void* ElementPtr = SetHelper.GetElementPtr(i);
 
-					AddStructSoftObjectToBundle(
-						*Property->GetMetaData(TEXT("AssetBundles")),
-						ElementPtr,
-						ElementStruct->Struct
-					);
-				}
-			}
-		}
-		else if (FMapProperty* MapProp = CastField<FMapProperty>(Property))
-		{
-			FScriptMapHelper MapHelper(MapProp, MapProp->ContainerPtrToValuePtr<void>(this));
-			FProperty* KeyProp = MapProp->KeyProp;
-			FProperty* ValueProp = MapProp->ValueProp;
+	//				AddStructSoftObjectToBundle(
+	//					*Property->GetMetaData(TEXT("AssetBundles")),
+	//					ElementPtr,
+	//					ElementStruct->Struct
+	//				);
+	//			}
+	//		}
+	//	}
+	//	else if (FMapProperty* MapProp = CastField<FMapProperty>(Property))
+	//	{
+	//		FScriptMapHelper MapHelper(MapProp, MapProp->ContainerPtrToValuePtr<void>(this));
+	//		FProperty* KeyProp = MapProp->KeyProp;
+	//		FProperty* ValueProp = MapProp->ValueProp;
 
-			// Only process struct keys
-			if (FStructProperty* KeyStruct = CastField<FStructProperty>(KeyProp))
-			{
-				for (int32 i = 0; i < MapHelper.GetMaxIndex(); ++i)
-				{
-					void* KeyPtr = MapHelper.GetKeyPtr(i);
+	//		// Only process struct keys
+	//		if (FStructProperty* KeyStruct = CastField<FStructProperty>(KeyProp))
+	//		{
+	//			for (int32 i = 0; i < MapHelper.GetMaxIndex(); ++i)
+	//			{
+	//				void* KeyPtr = MapHelper.GetKeyPtr(i);
 
-					AddStructSoftObjectToBundle(
-						*Property->GetMetaData(TEXT("AssetBundles")),
-						KeyPtr,
-						KeyStruct->Struct
-					);
-				}
-			}
+	//				AddStructSoftObjectToBundle(
+	//					*Property->GetMetaData(TEXT("AssetBundles")),
+	//					KeyPtr,
+	//					KeyStruct->Struct
+	//				);
+	//			}
+	//		}
 
-			// Only process struct values
-			if (FStructProperty* ValueStruct = CastField<FStructProperty>(ValueProp))
-			{
-				for (int32 i = 0; i < MapHelper.GetMaxIndex(); ++i)
-				{
-					void* ValuePtr = MapHelper.GetValuePtr(i);
+	//		// Only process struct values
+	//		if (FStructProperty* ValueStruct = CastField<FStructProperty>(ValueProp))
+	//		{
+	//			for (int32 i = 0; i < MapHelper.GetMaxIndex(); ++i)
+	//			{
+	//				void* ValuePtr = MapHelper.GetValuePtr(i);
 
-					AddStructSoftObjectToBundle(
-						*Property->GetMetaData(TEXT("AssetBundles")),
-						ValuePtr,
-						ValueStruct->Struct
-					);
-				}
-			}
-		}
-	}
+	//				AddStructSoftObjectToBundle(
+	//					*Property->GetMetaData(TEXT("AssetBundles")),
+	//					ValuePtr,
+	//					ValueStruct->Struct
+	//				);
+	//			}
+	//		}
+	//	}
+	//}
 }
 
 void URPGPrimaryAsset::AddStructSoftObjectToBundle(FName BundleName, const void* StructPtr, const UStruct* StructType)

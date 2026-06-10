@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
@@ -7,6 +7,9 @@
 #include "Helpers/RPGHelperMacros.h"
 
 #include "DataTypes/RPGId.h"
+
+#include "Abilities/AbilityDataTypes.h"
+#include "Misc/RPGTeamAgentInterface.h"
 
 #include "Levels/GameZoneContext.h"
 
@@ -60,17 +63,33 @@ public: // Character system settings
 	UPROPERTY(EditDefaultsOnly, config, Category = "Character|Default", meta=(IdType = "Character"))
 	TArray<FRPGId> PlayableCharacters;
 
-	// Default party members that will be used when starting a new game.
+	// Unsaveable party members that will be used when starting a new game.
 	UPROPERTY(EditDefaultsOnly, config, Category = "Character|Default", meta=(IdType = "Character"))
 	TArray<FRPGId> DefaultPartyMembers;
 
-	// Default player index in the party. This is used to determine which character will be controlled by the player.
+	// Unsaveable player index in the party. This is used to determine which character will be controlled by the player.
 	UPROPERTY(EditDefaultsOnly, config, Category = "Character|Default", meta=(ClampMin = "0", ArrayClamp = "DefaultPartyMembers"))
 	int32 DefaultPlayerIndex = 0;
 
 	// Maximum number of party members allowed in the game.
 	UPROPERTY(EditDefaultsOnly, config, Category = "Character|Party", meta=(ClampMin = "1"))
 	int32 MaxPartyMembers = 3;
+
+public: // Team settings
+	UPROPERTY(EditDefaultsOnly, config, Category = "Team", meta=(Categories = "Team"))
+	TMap<FGameplayTag, FTeamRelationInfo> TeamRelations = {
+		{ Team_Ally, FTeamRelationInfo::AllyTeamRelationInfo },
+		{ Team_Enemy, FTeamRelationInfo::EnemyTeamRelationInfo },
+		{ Team_Neutral, FTeamRelationInfo() }
+	};
+
+public: // Ability system settings
+	// The enum asset that defines the input bindings for abilities.
+	UPROPERTY(EditDefaultsOnly, config, Category = "Ability|Control", meta=(AllowedClasses = "/Script/CoreUObject.Enum"))
+	FSoftObjectPath AbilityInputEnum;
+
+	UPROPERTY(EditDefaultsOnly, config, Category = "Ability|Effect")
+	TMap<FGameplayTag, EMagnitudeRoundingMode> RoundingModes;
 	
 public: // Level settings
 	UPROPERTY(EditDefaultsOnly, config, Category = "Level|GameZone")

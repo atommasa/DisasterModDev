@@ -39,8 +39,9 @@ public class NarrativeSystemRuntime : ModuleRules
 				"Slate",
 				"SlateCore",
 				"UMG",
+                "StructUtils",
                 "RPGCore",
-                "BlueprintGraph",
+				"GameplayTags",
                 "GameplayCameras",
                 "LevelSequence",
                 "MovieScene",
@@ -48,9 +49,8 @@ public class NarrativeSystemRuntime : ModuleRules
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);
-		
-		
-		DynamicallyLoadedModuleNames.AddRange(
+
+        DynamicallyLoadedModuleNames.AddRange(
 			new string[]
 			{
 				// ... add any modules that your module loads dynamically here ...

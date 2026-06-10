@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "DataTypes/RPGId.h"
+#include "NativeGameplayTags.h"
 #include "GameZoneContext.generated.h"
 
 /**
@@ -26,24 +27,34 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
 	bool bUseSavedTransform = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta=(EditCondition = "!bUseSavedTransform"))
-	FName EntryPointTag;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta=(EditCondition = "!bUseSavedTransform", Categories = "EntryPoint"))
+	FGameplayTag EntryTag;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta = (EditCondition = "bUseSavedTransform"))
 	FTransform SavedTransform;
 
 	FGameZoneContext() = default;
 
-	FGameZoneContext(const FRPGId& InZoneId, const TArray<FRPGId>& InSubZoneId, const FName& InEntryPointTag)
+	FGameZoneContext(
+		const FRPGId& InZoneId,
+		const TArray<FRPGId>& InSubZoneIds,
+		const FGameplayTag& InEntryTag
+	)
 		: ZoneId(InZoneId)
-		, SubZoneIds(InSubZoneId)
-		, EntryPointTag(InEntryPointTag)
+		, SubZoneIds(InSubZoneIds)
+		, bUseSavedTransform(false)
+		, EntryTag(InEntryTag)
 	{
 	}
 
-	FGameZoneContext(const FRPGId& InZoneId, const TArray<FRPGId>& InSubZoneId, const FTransform& InSavedTransform)
+	FGameZoneContext(
+		const FRPGId& InZoneId,
+		const TArray<FRPGId>& InSubZoneIds,
+		const FTransform& InSavedTransform
+	)
 		: ZoneId(InZoneId)
-		, SubZoneIds(InSubZoneId)
+		, SubZoneIds(InSubZoneIds)
+		, bUseSavedTransform(true)
 		, SavedTransform(InSavedTransform)
 	{
 	}

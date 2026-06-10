@@ -1,10 +1,10 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Assets/NarrativeAssetAction.h"
 #include "NarrativeAsset.h"
 #include "Assets/NarrativeAssetEditorApp.h"
-#include "Narrative/NarrativeEventBlueprintBase.h"
+#include "Narrative/Dialogue.h"
 
 NarrativeAssetAction::NarrativeAssetAction(EAssetTypeCategories::Type Category)
 {

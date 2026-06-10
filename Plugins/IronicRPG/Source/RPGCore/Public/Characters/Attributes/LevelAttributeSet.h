@@ -15,20 +15,33 @@ class RPGCORE_API ULevelAttributeSet : public URPGAttributeSet
 	GENERATED_BODY()
 
 protected:
-	virtual void PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue) override;
+	virtual void PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue) override;
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
 
+	virtual void BindAttributeChangedDelegates(UAbilitySystemComponent* AbilitySystemComponent) override;
+	virtual TSet<FGameplayAttribute> GetSaveableAttributes() const override;
+	virtual const FGameplayAttribute GetMaxClampAttribute(const FGameplayAttribute& Attribute) const override;
+
 public: // Level Attributes
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level", meta=(SaveGame))
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level")
 	FGameplayAttributeData Level = 1.0f;
-	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, Level)
+	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, Level);
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level", meta=(SaveGame, AttributeClampMax = "ExpToNextLevel"))
+	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Level")
+	FOnAttributeChangedSignature OnLevelChanged;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level")
 	FGameplayAttributeData CurrentExp = 1.0f;
-	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, CurrentExp)
+	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, CurrentExp);
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level", meta=(SaveGame))
+	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Level")
+	FOnAttributeChangedSignature OnCurrentExpChanged;
+
+	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level")
 	FGameplayAttributeData ExpToNextLevel = 1.0f;
-	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, ExpToNextLevel)
+	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, ExpToNextLevel);
+
+	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Level")
+	FOnAttributeChangedSignature OnExpToNextLevelChanged;
 
 };

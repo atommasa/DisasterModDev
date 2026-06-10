@@ -1,10 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "Nodes/NarrativeGraphNodeBase.h"
-#include "Nodes/NarrativeGraphNodeStyle.h"
 #include "NarrativeStartGraphNode.generated.h"
 
 /**
@@ -17,11 +16,12 @@ class NARRATIVESYSTEMEDITOR_API UNarrativeStartGraphNode : public UNarrativeGrap
 
 public: // UEdGraphNode interface
 	virtual FText GetNodeTitle(ENodeTitleType::Type TitleType) const override { return FText::FromString("Start Node"); }
-	virtual FLinearColor GetNodeTitleColor() const override { return FLinearColor::Red; }
 	virtual bool CanUserDeleteNode() const override { return false; }
 	virtual TSharedPtr<SGraphNode> CreateVisualWidget() override;
+	virtual void AllocateDefaultPins() override;
 
 public: // UNarrativeGraphNode interface
+	virtual ENarrativeNodeType GetNarrativeNodeType() const override { return ENarrativeNodeType::StartNode; }
 	virtual UEdGraphPin* CreateNarrativePin(EEdGraphPinDirection Direction, FName PinName) override;
 
 };
@@ -37,8 +37,8 @@ public:
 		GraphNode = InNode;
 		SetCursor(EMouseCursor::CardinalCross);
 
-		NodeTitle = FText::FromString("Start");
 		TitleColor = FColor::Red;
+
 		UpdateGraphNode();
 	}
 

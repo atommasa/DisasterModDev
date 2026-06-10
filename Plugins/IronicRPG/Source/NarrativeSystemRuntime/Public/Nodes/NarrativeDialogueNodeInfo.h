@@ -34,9 +34,9 @@ class NARRATIVESYSTEMRUNTIME_API UNarrativeDialogueNodeInfo : public UNarrativeN
 
 public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Details")
-	FRPGId SpeakerId;
+	FText SpeakerName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Line")
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Line", meta=(MultiLine = "true"))
 	FText Dialogue;
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Line")

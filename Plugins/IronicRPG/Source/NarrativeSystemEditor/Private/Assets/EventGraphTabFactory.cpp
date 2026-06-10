@@ -1,11 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Assets/EventGraphTabFactory.h"
 #include "Assets/NarrativeAssetEditorApp.h"
 #include "Kismet2/KismetEditorUtilities.h"
-#include "NarrativeAsset.h"
-#include "SGraphActionMenu.h"
 
 EventGraphTabFactory::EventGraphTabFactory(TSharedPtr<class NarrativeAssetEditorApp> InApp)
     : FWorkflowTabFactory(FName("EventGraphTab"), InApp)
@@ -25,28 +23,18 @@ TSharedRef<SWidget> EventGraphTabFactory::CreateTabBody(const FWorkflowTabSpawnI
         return SNullWidget::NullWidget;
     }
 
-    SGraphEditor::FGraphEditorEvents GraphEvents;
-    //GraphEvents.OnCreateActionMenu = SGraphEditor::FOnCreateActionMenu::CreateLambda(
-    //    [](UEdGraph* Graph, const FVector2D& NodePosition, const TArray<UEdGraphPin*>& DragFromPins, bool bAutoExpand, SGraphEditor::FActionMenuClosed MenuClosedCallback)
-    //    {
-    //        FGraphContextMenuBuilder ContextMenuBuilder(Graph);
-    //        Graph->GetSchema()->GetGraphContextActions(ContextMenuBuilder);
-
-    //        return SNew(SGraphActionMenu, false)
-    //            .OnActionSelected(SGraphActionMenu::FOnActionSelected())
-    //            .AutoExpandActionMenu(bAutoExpand)
-    //            //.ActionMenuBuilder(ContextMenuBuilder)
-    //            .OnMenuClosed(MenuClosedCallback);
-    //    }
-    //);
+    UEdGraph* EventGraph = App->GetOrCreateSharedEventGraph();
 
     TSharedPtr<SGraphEditor> GraphEditor = SNew(SGraphEditor)
         .AdditionalCommands(App->GetCommandList())
-        .GraphToEdit(App->GetNarrativeAsset()->UbergraphPages.Last())
+        .GraphToEdit(EventGraph)
         .IsEditable(true)
         .AutoExpandActionMenu(true);
 
-    FKismetEditorUtilities::BringKismetToFocusAttentionOnObject(App->GetNarrativeAsset()->UbergraphPages.Last());
+    if (EventGraph)
+    {
+        FKismetEditorUtilities::BringKismetToFocusAttentionOnObject(EventGraph);
+    }
     
     return SNew(SVerticalBox)
         + SVerticalBox::Slot()

@@ -31,7 +31,6 @@ public class CharacterSystem : ModuleRules
                 "GameplayAbilities",
                 "GameplayTags",
                 "GameplayTasks",
-				"GameFramework",
                 "SaveSystem",
 				"RPGAI",
 				"RPGCheatRuntime",

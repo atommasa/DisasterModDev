@@ -22,6 +22,14 @@ concept AssetType = std::is_base_of_v<URPGPrimaryAsset, T>;
 template <AssetType T>
 class FRPGPrimaryAssetCustomization : public IDetailCustomization
 {
+public:
+	static TSharedRef<IDetailCustomization> MakeInstance() { return MakeShareable(new FRPGPrimaryAssetCustomization()); }
+
+	~FRPGPrimaryAssetCustomization()
+	{
+		FCoreUObjectDelegates::OnObjectTransacted.RemoveAll(this);
+	}
+
 protected:
 	virtual void CustomizeDetails(IDetailLayoutBuilder& DetailBuilder) override
 	{
@@ -39,11 +47,27 @@ protected:
 		FCoreUObjectDelegates::OnObjectTransacted.AddRaw(this, &FRPGPrimaryAssetCustomization::OnObjectTransacted);
 
 		IDetailCategoryBuilder& GeneralCategory = DetailBuilder.EditCategory(URPGPrimaryAsset::StaticClass()->GetFName(), FText::FromString(TEXT("General")));
-	}
 
-	~FRPGPrimaryAssetCustomization()
-	{
-		FCoreUObjectDelegates::OnObjectTransacted.RemoveAll(this);
+		DetailBuilder.SortCategories([](const TMap<FName, IDetailCategoryBuilder*>& Categories)
+			{
+				const TMap<FName, int32> CustomOrder = {
+					{"RPGPrimaryAsset", 1}, // General Category
+				};
+
+				for (auto& Pair : Categories)
+				{
+					const int32* ForcedOrder = CustomOrder.Find(Pair.Key);
+					if (ForcedOrder)
+					{
+						Pair.Value->SetSortOrder(*ForcedOrder);
+					}
+					else
+					{
+						// push others to bottom
+						Pair.Value->SetSortOrder(Pair.Value->GetSortOrder() + 100);
+					}
+				}
+			});
 	}
 
 	virtual void RefreshViewportFromAsset() {}

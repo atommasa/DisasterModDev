@@ -19,9 +19,9 @@ struct RPGCORE_API FRPGId
 	GENERATED_BODY()
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
-	FName Id;
+	FName Id = NAME_None;
 
-	FRPGId() : Id(TEXT("")) {}
+	FRPGId() = default;
 
 	FRPGId(const FName& InId) : Id(InId) {}
 

@@ -1,11 +1,11 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "SGraphPanel.h"
 #include "BlueprintEditor.h"
-#include "Blueprint/NarrativeEventBlueprint.h"
+#include "Blueprints/NarrativeEventBlueprint.h"
 #include "WorkflowOrientedApp/WorkflowCentricApplication.h"
 
 /**
@@ -45,7 +45,7 @@ public: // FAssetEditorToolkit interface
 	virtual void OnToolkitHostingFinished(const TSharedRef<class IToolkit>& Toolkit) override {}
 
 	virtual void OnClose() override;
-	void OnNodeDetailViewPropertiesUpdated(const FPropertyChangedEvent& Event);
+	// void OnNodeDetailViewPropertiesUpdated(const FPropertyChangedEvent& Event);
 	void OnWorkingAssetPreSave(const struct FEdGraphEditAction& InAction);
 
 public: // FUICommandList
@@ -89,11 +89,14 @@ public: // Event Blueprint
 
 	void OpenEventGraph();
 
-protected:
-	class UBlueprint* CreateSharedEventBlueprint();
+public:
+	UObject* GetClassDefaultsObject() const;
+	class UBlueprint* GetSharedEventBlueprint();
+	UEdGraph* GetOrCreateSharedEventGraph();
 
+protected:
 	void UpdateWorkingAssetFromGraph();
-	void UpdateEditorGraphFromWorkingAsset();
+	void RebuildEditorGraphFromRuntimeGraph();
 	class UNarrativeGraphNodeBase* GetSelectedNode(const FGraphPanelSelectionSet& Selection);
 
 	/** The command list for this editor */
@@ -107,4 +110,7 @@ private:
 	class UEdGraph* _WorkingGraph = nullptr;
 
 	TSharedPtr<SGraphEditor> _WorkingGraphUI = nullptr;
+
+	TSharedPtr<class IDetailsView> _SelectedNodeDetailView = nullptr;
+
 };

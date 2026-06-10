@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "AIController.h"
+#include "BehaviorTree/BehaviorTreeTypes.h"
 #include "RPGAIController.generated.h"
 
 /**
@@ -26,7 +27,7 @@ protected:
 	FName DetectedActorKeyName;
 
 	UPROPERTY(Transient)
-	struct FBlackboardKeySelector DetectedActorKey;
+	FBlackboardKeySelector DetectedActorKey;
 
 private:
 	class UAISenseConfig_Sight* SightConfig;

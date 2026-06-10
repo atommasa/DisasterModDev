@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
@@ -34,7 +34,7 @@ protected:
 	UPROPERTY(BlueprintReadWrite, Category = "Buttons")
 	FIntPoint CurrentFocusCoord;
 
-	// Default focus button
+	// Unsaveable focus button
 	UPROPERTY(EditDefaultsOnly, Category = "Buttons")
 	FIntPoint DefaultFocusCoord;
 

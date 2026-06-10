@@ -1,11 +1,11 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Narrative/NarrativeDialoguePlayer.h"
 #include "NarrativeAsset.h"
 #include "Nodes/NarrativeNodeInfo.h"
 #include "Nodes/NarrativeDialogueNodeInfo.h"
-#include "Nodes/NarrativePlayerNodeInfo.h"
+#include "Nodes/NarrativePlayerOptionsNodeInfo.h"
 
 DEFINE_LOG_CATEGORY_STATIC(NarrativePlayerRuntime, Log, All)
 
@@ -53,7 +53,7 @@ void UNarrativeDialoguePlayer::ContinueToNextLine()
 		UpdateFromDialogueNode();
 		break;
 
-	case ENarrativeNodeType::PlayerNode:
+	case ENarrativeNodeType::PlayerOptionsNode:
 		// TODO: Show Option UI
 		break;
 
@@ -74,12 +74,12 @@ void UNarrativeDialoguePlayer::ContinueToNextLine()
 
 void UNarrativeDialoguePlayer::ChoseOptionAtIndex(int Index)
 {
-	if (_CurrentNode->NodeType != ENarrativeNodeType::PlayerNode)
+	if (_CurrentNode->NodeType != ENarrativeNodeType::PlayerOptionsNode)
 	{
 		return;
 	}
 
-	UNarrativePlayerNodeInfo* NodeInfo = Cast<UNarrativePlayerNodeInfo>(_CurrentNode->NodeInfo);
+	UNarrativePlayerOptionsNodeInfo* NodeInfo = Cast<UNarrativePlayerOptionsNodeInfo>(_CurrentNode->NodeInfo);
 	if (NodeInfo && NodeInfo->Options.IsValidIndex(Index))
 	{
 		if (_CurrentNode->OutputPins.IsValidIndex(Index) &&

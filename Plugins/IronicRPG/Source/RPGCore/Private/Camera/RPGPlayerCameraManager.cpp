@@ -30,7 +30,7 @@ void ARPGPlayerCameraManager::UpdateCamera(float DeltaTime)
     }
     else
     {
-        // Default: Quadratic Bezier Curve
+        // Unsaveable: Quadratic Bezier Curve
         FVector Lerp1 = FMath::Lerp(StartPos, ControlPos, Alpha);
         FVector Lerp2 = FMath::Lerp(ControlPos, EndPos, Alpha);
         NewPos = FMath::Lerp(Lerp1, Lerp2, Alpha);

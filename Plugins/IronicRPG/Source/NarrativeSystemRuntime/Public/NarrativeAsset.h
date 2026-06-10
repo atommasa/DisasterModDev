@@ -1,12 +1,11 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
 #include "NarrativeRuntimeGraph.h"
-#include "BlueprintActionDatabaseRegistrar.h"
-#include "Narrative/NarrativeEventBlueprintBase.h"
+#include "Narrative/Dialogue.h"
 #include "NarrativeAsset.generated.h"
 
 UCLASS(BlueprintType)
@@ -42,7 +41,7 @@ private:
 };
 
 /**
- * This class is used to store narrative data, such as the speakers and their dialogues.
+ * 
  */
 UCLASS(BlueprintType)
 class NARRATIVESYSTEMRUNTIME_API UDialogueBlueprint : public UNarrativeBlueprintBase

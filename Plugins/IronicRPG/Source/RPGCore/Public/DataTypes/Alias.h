@@ -38,4 +38,9 @@ public:
 		return Aliases[Tag];
 	}
 
+public:
+	FText GetDefaultName() const { return DefaultName; }
+
+	bool IsValid() const { return !DefaultName.IsEmpty(); }
+
 };

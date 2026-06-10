@@ -36,7 +36,7 @@ public: // C++ Functions
 	 *
 	 * @return A handle to the streamable asset array.
 	 */
-	static TSharedPtr<FStreamableHandle> GetAssetArrayByRPGIdsAsync(const TArray<FRPGId>& Ids, TFunction<void(TArray<URPGPrimaryAsset*>)> OnResult);
+	static TSharedPtr<FStreamableHandle> GetAssetArrayByRPGIdsAsync(const TArray<FRPGId>& Ids, const TArray<FName>& Bundles, TFunction<void(TArray<URPGPrimaryAsset*>)> OnResult);
 
 public: // BlueprintCallable Functions
 	/*

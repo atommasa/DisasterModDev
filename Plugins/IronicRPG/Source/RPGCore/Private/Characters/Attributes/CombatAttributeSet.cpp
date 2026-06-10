@@ -1,20 +1,20 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Characters/Attributes/CombatAttributeSet.h"
-#include "GameplayEffectExtension.h"
+#include "AbilitySystemBlueprintLibrary.h"
 
-void UCombatAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+void UCombatAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
 {
-    Super::PreAttributeChange(Attribute, NewValue);
+    Super::PostAttributeChange(Attribute, OldValue, NewValue);
 
     if (Attribute == GetMaxHealthAttribute())
     {
-        MaxValueChanged(Health, MaxHealth, NewValue, GetHealthAttribute());
+        MaxValueChanged(GetHealthAttribute(), OldValue, NewValue);
     }
     else if (Attribute == GetMaxSpiritEnergyAttribute())
     {
-        MaxValueChanged(SpiritEnergy, MaxSpiritEnergy, NewValue, GetSpiritEnergyAttribute());
+        MaxValueChanged(GetSpiritEnergyAttribute(), OldValue, NewValue);
     }
 }
 
@@ -24,15 +24,39 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCall
 
     if (Data.EvaluatedData.Attribute == GetHealthAttribute())
     {
-        // Make sure Health does not drop below 0
-        SetHealth(FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth()));
+		float OldHealth = GetHealth() - Data.EvaluatedData.Magnitude; // Calculate old health before the change
 
-        // If Health is 0, character is dead
-        if (GetHealth() <= 0.0f)
+        // Make sure Health does not drop below 0
+        float NewHealth = FMath::Clamp(GetHealth(), 0.0f, GetMaxHealth());
+
+        SetHealth(NewHealth);
+
+        FAttributeEventContext EventContext = FAttributeEventContext::MakeContext(Data, OldHealth, NewHealth);
+
+        if (Data.EvaluatedData.ModifierOp == EGameplayModOp::Additive)
         {
-            
+            // If damage was applied
+            if (Data.EvaluatedData.Magnitude < 0.0f)
+            {
+				OnTakeDamage.Broadcast(EventContext);
+            }
+            // If healing was applied
+            else if (Data.EvaluatedData.Magnitude > 0.0f)
+            {
+                OnHeal.Broadcast(EventContext);
+            }
         }
 
+        // If Health is 0, broadcast the OnOutOfHealth event and return early to avoid triggering hit reactions or other effects
+        if (GetHealth() <= 0.0f)
+        {
+            OnOutOfHealth.Broadcast(EventContext);
+        }
+		// If Health was 0 and is now above 0, broadcast the OnRevive event
+        else if (OldHealth <= 0.0f)
+        {
+            OnRevive.Broadcast(EventContext);
+		}
     }
     else if (Data.EvaluatedData.Attribute == GetSpiritEnergyAttribute())
     {
@@ -70,3 +94,54 @@ void UCombatAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCall
         SetShield(FMath::Max(GetShield(), 0.0f));
     }
 }
+
+void UCombatAttributeSet::BindAttributeChangedDelegates(UAbilitySystemComponent* AbilitySystemComponent)
+{
+    if (!AbilitySystemComponent)
+    {
+        return;
+	}
+
+    BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, Health);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, MaxHealth);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, SpiritEnergy);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, MaxSpiritEnergy);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, Attack);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, Defense);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, CriticalRate);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, CriticalDamage);
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, CriticalResistance);
+    BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, Shield);
+}
+
+TSet<FGameplayAttribute> UCombatAttributeSet::GetSaveableAttributes() const
+{
+    static const TSet<FGameplayAttribute> SaveableAttributes = {
+        GetHealthAttribute(),
+        GetMaxHealthAttribute(),
+        GetSpiritEnergyAttribute(),
+        GetMaxSpiritEnergyAttribute(),
+        GetAttackAttribute(),
+        GetDefenseAttribute(),
+        GetCriticalRateAttribute(),
+        GetCriticalDamageAttribute(),
+        GetCriticalResistanceAttribute()
+	};
+
+	return SaveableAttributes;
+}
+
+const FGameplayAttribute UCombatAttributeSet::GetMaxClampAttribute(const FGameplayAttribute& Attribute) const
+{
+    if (Attribute == GetHealthAttribute())
+    {
+        return GetMaxHealthAttribute();
+    }
+    else if (Attribute == GetSpiritEnergyAttribute())
+    {
+        return GetMaxSpiritEnergyAttribute();
+    }
+
+	return nullptr;
+}
+

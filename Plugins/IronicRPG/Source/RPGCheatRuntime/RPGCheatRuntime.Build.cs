@@ -39,7 +39,6 @@ public class RPGCheatRuntime : ModuleRules
 				"Slate",
 				"SlateCore",
                 "InputCore",
-                "UnrealEd",
                 "RPGCore",
             }
 			);

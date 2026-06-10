@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
@@ -36,6 +36,9 @@ class NARRATIVESYSTEMRUNTIME_API UNarrativeRuntimeNode : public UObject
     GENERATED_BODY()
 
 public:
+    UPROPERTY()
+    FGuid NodeGuid;
+
     UPROPERTY()
 	ENarrativeNodeType NodeType = ENarrativeNodeType::UnknownNode;
 

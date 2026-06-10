@@ -7,13 +7,13 @@
 #include "DataTypes/RPGId.h"
 #include "Abilities/GameplayAbility.h"
 #include "AbilityDataTypes.h"
+#include "Misc/SynchronousTableMaster.h"
 #include "AbilityAsset.generated.h"
 
 class URPGGameplayAbility;
 
 /**
  * The Ability Asset class represents a skill ability in the RPG game, including its properties and default data.
- * This class is only for "skill" abilities but not for "behavior" abilities.
  */
 UCLASS()
 class RPGCORE_API UAbilityAsset : public URPGPrimaryAsset
@@ -36,15 +36,20 @@ protected:
 	TSoftClassPtr<URPGGameplayAbility> AbilityClass;
 	ASSET_PROP_GETTER(TSoftClassPtr<URPGGameplayAbility>, AbilityClass)
 
+	// 
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability")
+	TArray<FAbilityEffectSpec> EffectSpecs;
+	ASSET_PROP_GETTER(TArray<FAbilityEffectSpec>, EffectSpecs)
+
 	// The default cost specification for the ability.
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Cost")
 	FAbilityCostSpec DefaultCostSpec;
 	ASSET_PROP_GETTER(FAbilityCostSpec, DefaultCostSpec)
 
-	// The animation montage associated with the ability.
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation", EditFixedSize, meta=(AssetBundles = "Animation"))
-	TArray<FAnimMontageData> AbilityMontageData;
-	ASSET_PROP_GETTER(TArray<FAnimMontageData>, AbilityMontageData)
+	// The animation tags associated with the ability.
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation", EditFixedSize)
+	TArray<FGameplayTagContainer> RequireAnimTagContainers;
+	ASSET_PROP_GETTER(TArray<FGameplayTagContainer>, RequireAnimTagContainers)
 
 	// The characters that are allowed to use this ability or learn it.
 	// If empty, all characters can use it.
@@ -61,10 +66,6 @@ protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Ability")
 	bool bCanBeInterrupted = true;
 	ASSET_PROP_GETTER(bool, bCanBeInterrupted)
-
-	// -----------------------------
-	//	Gameplay Effect Properties
-	// -----------------------------
 
 	// -----------------------------
 	//	Tag Properties
@@ -134,6 +135,6 @@ protected:
 	virtual void PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent) override;
 
 private:
-	void OnObjectPropertyChanged(UObject* Object, FPropertyChangedEvent& Event);
+	void OnObjectTransacted(UObject* Object, const FTransactionObjectEvent& Event);
 #endif // WITH_EDITOR
 };

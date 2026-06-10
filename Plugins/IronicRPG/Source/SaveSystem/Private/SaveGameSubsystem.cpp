@@ -288,10 +288,11 @@ void USaveGameSubsystem::OnGameLoaded(const FString& SlotName, const int32 UserI
 
 			PendingSubsystems.Add(Provider);
 
+			Provider->OnLoadComplete().RemoveAll(Provider);
 			Provider->OnLoadComplete().AddLambda([this, Provider]()
 				{
 					UE_LOG(LogSaveSystem, Warning, TEXT("Subsystem %s has completed loading."), *Provider->_getUObject()->GetName());
-					Provider->OnLoadComplete().Clear();
+
 					PendingSubsystems.Remove(Provider);
 					if (PendingSubsystems.IsEmpty())
 					{

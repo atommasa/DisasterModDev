@@ -25,7 +25,7 @@ DEFINE_LOG_CATEGORY(LogCharacterSubsystem);
 void UCharacterSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-
+	
 	// Load settings
 	const URPGSettings* Settings = URPGSettings::GetRPGSettings();
 	if (!Settings)
@@ -51,24 +51,22 @@ void UCharacterSubsystem::Deinitialize()
 	InstanceCharacters.Empty();
 }
 
-void UCharacterSubsystem::StartupSubsystem_Implementation()
+void UCharacterSubsystem::SaveCharacterDataToMap(ABaseCharacter* Instance)
 {
-	
+	if (Instance && CharacterDataMap.Contains(Instance->GetId()))
+	{
+		FCharacterSaveData Data = Instance->GetCharacterData();
+		Data.bIsSaveData = true; // Mark as save data
+
+		CharacterDataMap[Instance->GetId()] = Data;
+	}
 }
 
-void UCharacterSubsystem::SyncCharacterDataMap()
+void UCharacterSubsystem::SavePartyMembersDataToMap()
 {
 	for (const FGuid& Guid : PartyMemberGuids)
 	{
-		if (!Guid.IsValid() || !InstanceCharacters.Contains(Guid))
-		{
-			continue;
-		}
-
-		if (APlayableCharacter* Character = Cast<APlayableCharacter>(InstanceCharacters[Guid]))
-		{
-			CharacterDataMap.Add(Character->GetId(), Character->GetCharacterData());
-		}
+		SaveCharacterDataToMap(InstanceCharacters.FindRef(Guid));
 	}
 }
 
@@ -132,7 +130,17 @@ void UCharacterSubsystem::ModifyCharactersData(const TArray<FRPGId>& Ids, UGamep
 	}
 }
 
-void UCharacterSubsystem::SetCharacterAvailability(const FRPGId Id, const ECharacterAvailabilityStatus Status)
+void UCharacterSubsystem::AddInstanceCharacter(ABaseCharacter* Character)
+{
+	if (InstanceCharacters.Contains(Character->GetInstanceId()))
+	{
+		return;
+	}
+
+	InstanceCharacters.Add(Character->GetInstanceId(), Character);
+}
+
+void UCharacterSubsystem::SetCharacterAvailability(const FRPGId& Id, const ECharacterAvailabilityStatus Status)
 {
 	if (CharacterDataMap.Contains(Id))
 	{
@@ -140,7 +148,7 @@ void UCharacterSubsystem::SetCharacterAvailability(const FRPGId Id, const EChara
 	}
 }
 
-bool UCharacterSubsystem::IsAvailable(const FRPGId Id) const
+bool UCharacterSubsystem::IsAvailable(const FRPGId& Id) const
 {
 	if (CharacterDataMap.Contains(Id))
 	{
@@ -150,16 +158,13 @@ bool UCharacterSubsystem::IsAvailable(const FRPGId Id) const
 	return false;
 }
 
-ABaseCharacter* UCharacterSubsystem::SpawnCharacter(const FRPGId& Id, const TSubclassOf<ABaseCharacter> CharacterClass, const FVector Location, const FRotator Rotation, const bool bAsync, const FGuid InGuid)
+ABaseCharacter* UCharacterSubsystem::SpawnCharacter(const FRPGId& Id, const TSubclassOf<ABaseCharacter> CharacterClass, const FVector Location, const FRotator Rotation, const bool bAsync)
 {
 	if (!Id.IsValid())
 	{
 		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Spawn character with invalid Character Id!"));
 		return nullptr;
 	}
-
-	// Use provided Guid or generate a new one
-	const FGuid& CharacterGuid = InGuid.IsValid() ? InGuid : FGuid::NewGuid();
 
 	if (bAsync)
 	{
@@ -169,14 +174,15 @@ ABaseCharacter* UCharacterSubsystem::SpawnCharacter(const FRPGId& Id, const TSub
 
 		// Spawn the character actor immediately, but without data
 		ABaseCharacter* NewCharacter = GetWorld()->SpawnActor<ABaseCharacter>(CharacterClass, Location, Rotation, Params);
+		const FGuid CharacterGuid = NewCharacter->GetInstanceId();
 		if (!InstanceCharacters.Contains(CharacterGuid))
 		{
 			UE_LOG(LogTemp, Display, TEXT("Spawning async character with Guid: %s"), *CharacterGuid.ToString());
-			InstanceCharacters.Add(CharacterGuid, NewCharacter);
+			AddInstanceCharacter(NewCharacter);
 		}
 
 		// Apply data when asset is loaded
-		URPGAssetLibrary::GetAssetByRPGIdAsync(Id, {}, [this, CharacterGuid](URPGPrimaryAsset* Asset)
+		URPGAssetLibrary::GetAssetByRPGIdAsync(Id, { "Character", "UI" }, [this, CharacterGuid](URPGPrimaryAsset* Asset)
 			{
 				OnCharacterToSpawnLoaded(Asset, CharacterGuid);
 			});
@@ -186,11 +192,11 @@ ABaseCharacter* UCharacterSubsystem::SpawnCharacter(const FRPGId& Id, const TSub
 	else
 	{
 		URPGPrimaryAsset* Asset = URPGAssetLibrary::GetAssetByRPGId(Id);
-		return SpawnCharacterByAsset(Cast<UCharacterAsset>(Asset), CharacterClass, Location, Rotation, CharacterGuid);
+		return SpawnCharacterByAsset(Cast<UCharacterAsset>(Asset), CharacterClass, Location, Rotation);
 	}
 }
 
-ABaseCharacter* UCharacterSubsystem::SpawnCharacterByAsset(UCharacterAsset* Asset, const TSubclassOf<ABaseCharacter> CharacterClass, const FVector Location, const FRotator Rotation, const FGuid InGuid)
+ABaseCharacter* UCharacterSubsystem::SpawnCharacterByAsset(UCharacterAsset* Asset, const TSubclassOf<ABaseCharacter> CharacterClass, const FVector Location, const FRotator Rotation)
 {
 	if (!Asset)
 	{
@@ -208,7 +214,7 @@ ABaseCharacter* UCharacterSubsystem::SpawnCharacterByAsset(UCharacterAsset* Asse
 	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
 	Params.OverrideLevel = GetWorld()->PersistentLevel;
 
-	auto* NewCharacter = GetWorld()->SpawnActor<ABaseCharacter>(SpawnClass, Location, Rotation, Params);
+	ABaseCharacter* NewCharacter = GetWorld()->SpawnActor<ABaseCharacter>(SpawnClass, Location, Rotation, Params);
 	if (NewCharacter)
 	{
 		FCharacterSaveData* SavedData = CharacterDataMap.Find(Asset->GetId());
@@ -221,14 +227,7 @@ ABaseCharacter* UCharacterSubsystem::SpawnCharacterByAsset(UCharacterAsset* Asse
 			NewCharacter->InitCharacterDataDefault(Asset);
 		}
 
-		if (InGuid.IsValid() && !InstanceCharacters.Contains(InGuid))
-		{
-			InstanceCharacters.Add(InGuid, NewCharacter);
-		}
-		else
-		{
-			InstanceCharacters.Add(FGuid::NewGuid(), NewCharacter);
-		}
+		AddInstanceCharacter(NewCharacter);
 
 		return NewCharacter;
 	}
@@ -245,6 +244,9 @@ void UCharacterSubsystem::DespawnCharacter(const FGuid& Guid)
 
 	if (ABaseCharacter* Character = InstanceCharacters[Guid])
 	{
+		// Save character data before destroying
+		SaveCharacterDataToMap(Character);
+
 		Character->Destroy();
 	}
 
@@ -273,7 +275,10 @@ void UCharacterSubsystem::OnCharacterToSpawnLoaded(URPGPrimaryAsset* Asset, cons
 
 	if (TObjectPtr<ABaseCharacter> Instance = InstanceCharacters.FindRef(InGuid))
 	{
-		if (auto* CharacterAsset = Cast<UCharacterAsset>(Asset))
+		// Save character data before applying new data
+		SaveCharacterDataToMap(Instance);
+
+		if (const UCharacterAsset* CharacterAsset = Cast<UCharacterAsset>(Asset))
 		{
 			FCharacterSaveData* SavedData = CharacterDataMap.Find(Asset->GetId());
 			if (SavedData)
@@ -284,11 +289,27 @@ void UCharacterSubsystem::OnCharacterToSpawnLoaded(URPGPrimaryAsset* Asset, cons
 			{
 				Instance->InitCharacterDataDefault(CharacterAsset);
 			}
+
+			Instance->OnCharacterDataInitialized.AddLambda([this](ABaseCharacter*)
+				{
+					PendingPartyInitCount--;
+					TryBroadcastPartyReady();
+				});
 		}
 		else
 		{
 			UE_LOG(LogCharacterSubsystem, Warning, TEXT("Loaded asset is not a Character Asset!"));
 		}
+	}
+}
+
+void UCharacterSubsystem::TryBroadcastPartyReady()
+{
+	if (bPartyTeleportDone && PendingPartyInitCount == 0)
+	{
+		bIsSpawningPartyMembers = false;
+		OnPartyReady.Broadcast();
+		OnPartyConstructed.Broadcast();
 	}
 }
 
@@ -347,8 +368,23 @@ void UCharacterSubsystem::SpawnPartyMembers(const FVector Location, const FRotat
 	SpawnNewPartyMembers(PartyMemberIds, Location, Rotation, bAsync, SpawnPartyMode);
 }
 
+void UCharacterSubsystem::SpawnPartyMembers(const FTransform Transform, bool bAsync, ESpawnPartyMode SpawnPartyMode)
+{
+	SpawnNewPartyMembers(PartyMemberIds, Transform.GetLocation(), Transform.Rotator(), bAsync, SpawnPartyMode);
+}
+
 void UCharacterSubsystem::SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FVector Location, const FRotator Rotation, bool bAsync, ESpawnPartyMode SpawnPartyMode)
 {
+	if (bIsSpawningPartyMembers)
+	{
+		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Cannot spawn party members while another spawn is in progress!"));
+		return;
+	}
+
+	bIsSpawningPartyMembers = true;
+	PendingPartyInitCount = 0;
+	bPartyTeleportDone = false;
+
 	if (NewParty.IsEmpty())
 	{
 		UE_LOG(LogCharacterSubsystem, Warning, TEXT("NewParty is empty!"));
@@ -378,7 +414,7 @@ void UCharacterSubsystem::SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FV
 			int32 NewPlayerIndex = NewParty.IndexOfByKey(PartyMemberIds[PlayerPartyIndex]);
 			if (NewPlayerIndex == INDEX_NONE)
 			{
-				NewPlayerIndex = 0; // Default to first member
+				NewPlayerIndex = 0; // Unaveable to first member
 			}
 			
 			PartyMemberGuids.Swap(PlayerPartyIndex, NewPlayerIndex);
@@ -432,15 +468,21 @@ void UCharacterSubsystem::SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FV
 		
 		// Set new Id to the current character instance
 		else if (bInstanceValid && bNewPartyValid)
-		{ 
+		{
+			ABaseCharacter* Instance = InstanceCharacters[PartyMemberGuids[i]];
+
+			// Save current character data before changing
+			SaveCharacterDataToMap(Instance);
+
 			const FRPGId& NewId = NewParty[i];
+
 			if (CharacterDataMap.Contains(NewId))
 			{
-				InstanceCharacters[PartyMemberGuids[i]]->InitCharacterDataById(NewId, CharacterDataMap[NewId]);
+				Instance->InitCharacterDataById(NewId, CharacterDataMap[NewId]);
 			}
 			else
 			{ 
-				InstanceCharacters[PartyMemberGuids[i]]->InitCharacterDataDefaultById(NewId);
+				Instance->InitCharacterDataDefaultById(NewId);
 			} 
 		} 
 	}
@@ -463,12 +505,17 @@ void UCharacterSubsystem::SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FV
 
 		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Spawn %s"), *SpawnId.ToString());
 
-		const FGuid NewGuid = FGuid::NewGuid();
-		ABaseCharacter* NewCharacter = SpawnCharacter(SpawnId, SpawnClass, Location, Rotation, bAsync, NewGuid);
+		ABaseCharacter* NewCharacter = SpawnCharacter(SpawnId, SpawnClass, Location, Rotation, bAsync);
 
 		if (NewCharacter)
 		{
+			const FGuid& NewGuid = NewCharacter->GetInstanceId();
 			PartyMemberGuids.Add(NewGuid);
+
+			if (bAsync)
+			{
+				PendingPartyInitCount++;
+			}
 		}
 		else
 		{
@@ -479,7 +526,8 @@ void UCharacterSubsystem::SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FV
 	// After all members are spawned, teleport them to the location
 	TeleportPartyMembers(Location, Rotation);
 
-	OnPartyMembersSpawned.Broadcast(PartyMemberIds);
+	bPartyTeleportDone = true;
+	TryBroadcastPartyReady();
 }
 
 void UCharacterSubsystem::TeleportPartyMembers(const FVector Location, const FRotator Rotation)
@@ -625,6 +673,28 @@ bool UCharacterSubsystem::CanJoinParty(const FRPGId Id) const
 	return IsAvailable(Id);
 }
 
+void UCharacterSubsystem::SwitchToNextCharacter(const float DurationOverridden)
+{
+	int32 Index = PlayerPartyIndex + 1;
+	if (Index >= PartyMemberGuids.Num())
+	{
+		Index = 0;
+	}
+
+	SwitchPlayerCharacterByIndex(Index, DurationOverridden);
+}
+
+void UCharacterSubsystem::SwitchToPreviousCharacter(const float DurationOverridden)
+{
+	int32 Index = PlayerPartyIndex - 1;
+	if (Index < 0)
+	{
+		Index = PartyMemberGuids.Num() - 1;
+	}
+
+	SwitchPlayerCharacterByIndex(Index, DurationOverridden);
+}
+
 void UCharacterSubsystem::SwitchPlayerCharacterByIndex(const int32 Index, const float DurationOverridden)
 {
 	if (!PartyMemberGuids.IsValidIndex(Index))
@@ -700,19 +770,8 @@ void UCharacterSubsystem::SaveDataTo(FInstancedStruct& SaveData)
 
 	FCharacterSaveModule CharacterSave;
 	
-	// Force update CharacterDataMap from characters here
-	for (const FGuid& Guid : PartyMemberGuids)
-	{
-		if (!Guid.IsValid() || !InstanceCharacters.Contains(Guid))
-		{
-			continue;
-		}
-
-		if (APlayableCharacter* Member = Cast<APlayableCharacter>(InstanceCharacters[Guid]))
-		{
-			CharacterDataMap.Add(Member->GetId(), Member->GetCharacterData());
-		}
-	}
+	// Force save all party members' data to map before saving
+	SavePartyMembersDataToMap();
 
 	CharacterSave.CharacterData = CharacterDataMap;
 
@@ -731,7 +790,11 @@ void UCharacterSubsystem::LoadDataFrom(const FInstancedStruct& SaveData)
 		PlayerPartyIndex = CharacterSave->PlayerPartyIndex;
 		PartyMemberIds = CharacterSave->PartyMembers;
 
-		OnLoadComplete().Broadcast();
+		// Load character data of all party members to map, so that they can be applied to character instances when spawned
+		URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(PartyMemberIds, { "Character", "UI" }, [this](TArray<URPGPrimaryAsset*> Result)
+			{
+				OnLoadComplete().Broadcast();
+			});
 	}
 	// If the struct type does not match, we treat it as a new game
 	else
@@ -749,18 +812,21 @@ void UCharacterSubsystem::LoadDataFrom(const FInstancedStruct& SaveData)
 		PlayerPartyIndex = Settings->DefaultPlayerIndex;
 
 		// Initialize character data map
-		TArray<URPGPrimaryAsset*> Assets;
-		URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(Settings->PlayableCharacters, [this](TArray<URPGPrimaryAsset*> Result)
+		URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(Settings->PlayableCharacters, {}, [this, DefaultParty = Settings->DefaultPartyMembers](TArray<URPGPrimaryAsset*> Result)
 			{
-				for (auto* Asset : Result)
+				for (URPGPrimaryAsset* Asset : Result)
 				{
-					if (auto* CharacterAsset = Cast<UCharacterAsset>(Asset))
+					if (UCharacterAsset* CharacterAsset = Cast<UCharacterAsset>(Asset))
 					{
 						CharacterDataMap.Add(Asset->GetId(), CharacterAsset->GetDefaultData());
 					}
 				}
 
-				OnLoadComplete().Broadcast();
+				// Load default party members' data to map, so that they can be applied to character instances when spawned
+				URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(DefaultParty, { "Character", "UI"}, [this](TArray<URPGPrimaryAsset*> Result)
+					{
+						OnLoadComplete().Broadcast();
+					});
 			});
 	}
 }

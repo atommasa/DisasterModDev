@@ -40,7 +40,7 @@ protected:
 
 	// The class of the character to spawn at this point.
 	// Can not spawn PlayableCharacter directly.
-	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Spawn Point", meta=(DisallowedClasses = "PlayableCharacter", DisplayPriority = 20))
+	UPROPERTY(EditInstanceOnly, BlueprintReadOnly, Category = "Spawn Point", meta=(DisallowedClasses = "/Script/RPGCore.PlayableCharacter", DisplayPriority = 20))
 	TSubclassOf<ABaseCharacter> SpawnClass = ABaseCharacter::StaticClass();
 
 	// Patrol data to assign to the spawned character if applicable.

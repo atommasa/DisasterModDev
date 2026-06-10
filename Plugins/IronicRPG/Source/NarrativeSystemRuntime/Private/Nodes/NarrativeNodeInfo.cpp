@@ -1,5 +1,13 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Nodes/NarrativeNodeInfo.h"
 
+#if WITH_EDITOR
+void UNarrativeNodeInfo::PostEditChangeChainProperty(FPropertyChangedChainEvent& PropertyChangedChainEvent)
+{
+	Super::PostEditChangeProperty(PropertyChangedChainEvent);
+
+	OnNodeInfoPropertyChanged.Broadcast(PropertyChangedChainEvent);
+}
+#endif // WITH_EDITOR

@@ -9,6 +9,8 @@
 #include "Styling/SlateStyleMacros.h"
 #include "Styling/SlateStyleRegistry.h"
 
+#include "RPGIdGraphPin.h"
+
 class FRPGEditorStyleSet final : public FSlateStyleSet
 {
 public:
@@ -48,5 +50,8 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+private:
+	TSharedPtr<FRPGIdGraphPinFactory> RPGIdPinFactory;
 
 };

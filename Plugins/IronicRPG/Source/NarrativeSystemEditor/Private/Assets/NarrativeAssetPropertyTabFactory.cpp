@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Assets/NarrativeAssetPropertyTabFactory.h"
@@ -33,7 +33,7 @@ TSharedRef<SWidget> NarrativeAssetPropertyTabFactory::CreateTabBody(const FWorkf
 	DetailsViewArgs.bLockable = false;
 	DetailsViewArgs.bSearchInitialKeyFocus = true;
 	DetailsViewArgs.bUpdatesFromSelection = false;
-	DetailsViewArgs.NotifyHook = nullptr;
+	DetailsViewArgs.NotifyHook = App.Get();
 	DetailsViewArgs.bShowOptions = true;
 	DetailsViewArgs.bShowModifiedPropertiesOption = false;
 	DetailsViewArgs.bShowScrollBar = false;
@@ -41,7 +41,20 @@ TSharedRef<SWidget> NarrativeAssetPropertyTabFactory::CreateTabBody(const FWorkf
 	TSharedPtr<IDetailsView> DetailsView = PropertyEditorModule.CreateDetailView(DetailsViewArgs);
 
 	// Set the object to be displayed in the details view
-	DetailsView->SetObject(App->GetNarrativeAsset());
+	DetailsView->SetObject(App->GetClassDefaultsObject());
+
+	DetailsView->OnFinishedChangingProperties().AddLambda(
+		[WeakApp = _App](const FPropertyChangedEvent& Event)
+		{
+			TSharedPtr<NarrativeAssetEditorApp> App = WeakApp.Pin();
+			if (!App.IsValid())
+			{
+				return;
+			}
+
+			App->OnFinishedChangingProperties(Event);
+		}
+	);
 
 	TSharedPtr<IDetailsView> SelectedNodeDetailsView = PropertyEditorModule.CreateDetailView(DetailsViewArgs);
 	SelectedNodeDetailsView->SetObject(nullptr);

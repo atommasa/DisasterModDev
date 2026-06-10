@@ -10,17 +10,19 @@
 #include "Framework/Commands/GenericCommands.h"
 #include "KismetCompiler.h"
 #include "NarrativeAsset.h"
-#include "Blueprint/DialogueBlueprintCompiler.h"
+#include "Blueprints/DialogueBlueprintCompiler.h"
+#include "Blueprints/DialogueBlueprintGeneratedClass.h"
 #include "KismetCompilerModule.h"
 #include "AssetRegistry/AssetRegistryModule.h"
-#include "Narrative/NarrativeEventBlueprintBase.h"
+#include "Narrative/Dialogue.h"
+#include "Nodes/NarrativeNodeKnot.h"
 
 #define LOCTEXT_NAMESPACE "FNarrativeSystemEditorModule"
 
 /*
 * This class is used to create a custom pin type for the Narrative System.
 */
-class SNarrativeGraphPin : public SGraphPin
+class SNarrativeGraphPin : public SNarrativeGraphPinBase
 {
 public:
 	SLATE_BEGIN_ARGS(SNarrativeGraphPin) {}
@@ -28,7 +30,7 @@ public:
 
 	void Construct(const FArguments& InArgs, UEdGraphPin* InPin)
 	{
-		SGraphPin::Construct(SGraphPin::FArguments(), InPin);
+		SNarrativeGraphPinBase::Construct(SNarrativeGraphPinBase::FArguments(), InPin);
 	}
 
 protected:
@@ -38,7 +40,7 @@ protected:
 	}
 };
 
-class SNarrativeStartGraphPin : public SGraphPin
+class SNarrativeStartGraphPin : public SNarrativeGraphPinBase
 {
 public:
 	SLATE_BEGIN_ARGS(SNarrativeStartGraphPin) {}
@@ -46,7 +48,7 @@ public:
 
 	void Construct(const FArguments& InArgs, UEdGraphPin* InPin)
 	{
-		SGraphPin::Construct(SGraphPin::FArguments(), InPin);
+		SNarrativeGraphPinBase::Construct(SNarrativeGraphPinBase::FArguments(), InPin);
 	}
 
 protected:
@@ -62,7 +64,11 @@ public:
 	virtual ~FNarrativePinFactory() {}
 	virtual TSharedPtr<SGraphPin> CreatePin(UEdGraphPin* Pin) const override
 	{
-		if (FName(TEXT("NarrativePin")) == Pin->PinType.PinSubCategory)
+		if (Pin->GetOwningNode() && Pin->GetOwningNode()->IsA<UNarrativeNodeKnot>())
+		{
+			return SNew(SNarrativeNodeKnotPin, Pin);
+		}
+		else if (UNarrativeGraphNodeBase::PinNane == Pin->PinType.PinSubCategory)
 		{
 			return SNew(SNarrativeGraphPin, Pin);
 		}
@@ -95,8 +101,6 @@ void FNarrativeSystemEditorModule::StartupModule()
 
 	// Register custom Blueprint compiler for DialogueBlueprint
 	IKismetCompilerInterface& KismetCompiler = FModuleManager::LoadModuleChecked<IKismetCompilerInterface>("KismetCompiler");
-	KismetCompiler.GetCompilers().Add(new FDialogueBlueprintCompilerModule());
-
 	FKismetCompilerContext::RegisterCompilerForBP(
 		UDialogueBlueprint::StaticClass(),
 		[](UBlueprint* Blueprint, FCompilerResultsLog& InMessageLog, const FKismetCompilerOptions& InCompileOptions) -> TSharedPtr<FKismetCompilerContext>
@@ -104,12 +108,6 @@ void FNarrativeSystemEditorModule::StartupModule()
 			return MakeShareable(new DialogueBlueprintCompiler(CastChecked<UDialogueBlueprint>(Blueprint), InMessageLog, InCompileOptions));
 		}
 	);
-
-	FCoreDelegates::OnFEngineLoopInitComplete.AddLambda([]()
-		{
-			// Refresh Blueprint node actions for DialogueBlueprint
-			FBlueprintActionDatabase::Get().RefreshAssetActions(UDialogueBlueprint::StaticClass());
-		});
 }
 
 void FNarrativeSystemEditorModule::ShutdownModule()

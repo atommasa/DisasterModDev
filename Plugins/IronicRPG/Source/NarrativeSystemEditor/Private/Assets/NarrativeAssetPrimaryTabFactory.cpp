@@ -1,15 +1,9 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Assets/NarrativeAssetPrimaryTabFactory.h"
 #include "Assets/NarrativeAssetEditorApp.h"
-#include "NarrativeAsset.h"
-#include "IDetailsView.h"
-#include "PropertyEditorModule.h"
 #include "GraphEditor.h"
-#include "Editor/UnrealEd/Public/Kismet2/BlueprintEditorUtils.h"
-#include "Kismet2/KismetEditorUtilities.h"
-#include "Nodes/NarrativeNodeInfo.h"
 
 NarrativeAssetPrimaryTabFactory::NarrativeAssetPrimaryTabFactory(TSharedPtr<class NarrativeAssetEditorApp> InApp)
 	: FWorkflowTabFactory(FName("NarrativeAssetPrimaryTab"), InApp)

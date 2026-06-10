@@ -2,8 +2,11 @@
 
 
 #include "GameZoneSubsystem.h"
-#include "SaveGameSubsystem.h"
+#include "EngineUtils.h"
+
 #include "RPGSettings.h"
+#include "SaveGameSubsystem.h"
+#include "LoadingScreenSubsystem.h"
 
 # include "Kismet/GameplayStatics.h"
 #include "Engine/LevelStreamingDynamic.h"
@@ -28,34 +31,31 @@ void UGameZoneSubsystem::Deinitialize()
 
 }
 
-void UGameZoneSubsystem::StartupSubsystem_Implementation()
-{
-	
-}
-
 void UGameZoneSubsystem::EnterGameZone(const FGameZoneContext& NewGameZoneContext, TDelegate<void()> DelegateToCall)
 {
+	PendingContext = NewGameZoneContext;
+
 	// Check if the new context's ZoneId (Persistent Level) is different from the current one
 	// If it is different, we use AGameMode to handle the transition
 	// If it is the same, we use UGameZoneSubsystem to handle the transition
 	if (CurrentContext.ZoneId == NewGameZoneContext.ZoneId)
 	{
 		// Start loading the sub-zone if it is different from the current one
-		LoadSubZone(NewGameZoneContext, TDelegate<void()>::CreateLambda([DelegateToCall]()
+		LoadSubZone(NewGameZoneContext, TDelegate<void()>::CreateLambda([this, DelegateToCall]()
 			{
+				CurrentContext = PendingContext;
 				DelegateToCall.ExecuteIfBound();
 			}));
 	}
 	else
 	{
 		// If the ZoneId is different, we need to load the new zone and sub-zone
-		LoadZone(NewGameZoneContext, TDelegate<void()>::CreateLambda([DelegateToCall]()
+		LoadZone(NewGameZoneContext, TDelegate<void()>::CreateLambda([this, DelegateToCall]()
 			{
+				CurrentContext = PendingContext;
 				DelegateToCall.ExecuteIfBound();
 			}));
 	}
-
-	CurrentContext = NewGameZoneContext;
 }
 
 void UGameZoneSubsystem::LoadZone(const FGameZoneContext& LoadContext, TDelegate<void()> DelegateToCall)
@@ -94,6 +94,7 @@ void UGameZoneSubsystem::LoadZone(const FGameZoneContext& LoadContext, TDelegate
 				if (!ZoneAsset || !ZoneAsset->LevelToLoad.IsValid())
 				{
 					UE_LOG(LogTemp, Warning, TEXT("Zone asset %s has no valid level to load!"), *ZoneAssetId.ToString());
+					DelegateToCall.ExecuteIfBound();
 					return;
 				}
 
@@ -113,6 +114,8 @@ void UGameZoneSubsystem::LoadZone(const FGameZoneContext& LoadContext, TDelegate
 					CurrentStreaming->OnLevelShown.AddUniqueDynamic(this, &UGameZoneSubsystem::WaitUntilLevelActorInitialized);
 				}
 			}
+
+			DelegateToCall.ExecuteIfBound();
 		});
 
 	URPGAssetManager& AssetManager = URPGAssetManager::Get();
@@ -189,6 +192,44 @@ void UGameZoneSubsystem::CreateStreamInstance(UWorld* World, const FString& Long
 	World->AddStreamingLevel(StreamingLevel);
 }
 
+FTransform UGameZoneSubsystem::GetSaveGameTransform() const
+{
+	// If we have a saved transform, use that for spawning
+	if (CurrentContext.bUseSavedTransform)
+	{
+		return CurrentContext.SavedTransform;
+	}
+	// Otherwise, find a PlayerStart with a matching tag
+	else
+	{
+		for (TActorIterator<ARPGPlayerStart> It(GetWorld()); It; ++It)
+		{
+			ARPGPlayerStart* Start = *It;
+			if (!Start)
+			{
+				continue;
+			}
+
+			UE_LOG(LogTemp, Display, TEXT(
+				"Found PlayerStart [%s] in World [%s], Level: [%s]"
+			),
+				*It->GetName(),
+				*It->GetWorld()->GetName(),
+				*GetNameSafe(It->GetLevel()));
+
+			if (Start->EntryPointTags.HasTag(CurrentContext.EntryTag))
+			{
+				return Start->GetActorTransform();
+				break;
+			}
+		}
+
+		UE_LOG(LogTemp, Warning, TEXT("No PlayerStart found with tag [%s], spawning at origin!"), *CurrentContext.EntryTag.ToString());
+	}
+
+	return FTransform::Identity;
+}
+
 UGameZoneAsset* UGameZoneSubsystem::FindZoneAssetForCurrentMap() const
 {
 	FString MapName = GetWorld()->GetMapName();
@@ -252,7 +293,7 @@ void UGameZoneSubsystem::SaveDataTo(FInstancedStruct& SaveData)
 
 	APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0);
 	APawn* Pawn = PC ? PC->GetPawn() : nullptr;
-
+	// TODO: 選擇使用 Transform 或者 EntryTag 存檔
 	if (Pawn)
 	{
 		ZoneSave.CurrentContext.bUseSavedTransform = true;
@@ -266,7 +307,6 @@ void UGameZoneSubsystem::LoadDataFrom(const FInstancedStruct& SaveData)
 {
 	if (const FGameZoneSaveModule* ZoneSave = SaveData.GetPtr<FGameZoneSaveModule>())
 	{
-		// Load transform
 		EnterGameZone(ZoneSave->CurrentContext);
 	}
 	// If the struct type does not match, we treat it as a new game

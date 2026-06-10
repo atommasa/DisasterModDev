@@ -1,12 +1,12 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Characters/Attributes/SocialAttributeSet.h"
 #include "GameplayEffectExtension.h"
 
-void USocialAttributeSet::PreAttributeChange(const FGameplayAttribute& Attribute, float& NewValue)
+void USocialAttributeSet::PostAttributeChange(const FGameplayAttribute& Attribute, float OldValue, float NewValue)
 {
-    Super::PreAttributeChange(Attribute, NewValue);
+    Super::PostAttributeChange(Attribute, OldValue, NewValue);
 
     
 }
@@ -16,4 +16,23 @@ void USocialAttributeSet::PostGameplayEffectExecute(const FGameplayEffectModCall
     Super::PostGameplayEffectExecute(Data);
 
     
+}
+
+void USocialAttributeSet::BindAttributeChangedDelegates(UAbilitySystemComponent* AbilitySystemComponent)
+{
+    if (!AbilitySystemComponent)
+    {
+        return;
+	}
+
+	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, USocialAttributeSet, Favorability);
+}
+
+TSet<FGameplayAttribute> USocialAttributeSet::GetSaveableAttributes() const
+{
+    static const TSet<FGameplayAttribute> SaveableAttributes = {
+        GetFavorabilityAttribute()
+    };
+
+	return SaveableAttributes;
 }

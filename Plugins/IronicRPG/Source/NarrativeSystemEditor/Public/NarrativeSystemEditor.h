@@ -4,10 +4,13 @@
 
 #include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
+#include "EdGraphUtilities.h"
 #include "Styling/SlateStyle.h"
 #include "Styling/SlateStyleMacros.h"
 #include "Styling/SlateStyleRegistry.h"
 
+#include "Nodes/NarrativeGraphNodeBase.h"
+#include "Nodes/NarrativeNodeKnot.h"
 
 class FNarrativeSystemEditorStyleSet final : public FSlateStyleSet
 {

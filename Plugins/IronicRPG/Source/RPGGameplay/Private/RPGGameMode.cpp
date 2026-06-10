@@ -30,10 +30,14 @@ void ARPGGameMode::InitGame(const FString& MapName, const FString& Options, FStr
 	LoadingScreenSubsystem = ULoadingScreenSubsystem::Get(this);
 	check(LoadingScreenSubsystem);
 	// TODO: Maybe use more fliexible event binding (e.g., BlueprintImplementableEvent)
-	LoadingScreenSubsystem->OnLoadingScreenStop.AddUniqueDynamic(this, &ARPGGameMode::OnLoadingScreenStopped);
+	LoadingScreenSubsystem->OnLoadingScreenStop.AddUniqueDynamic(this, &ARPGGameMode::OnStoppedLoading);
 
 	CharacterSubsystem = GetGameInstance()->GetSubsystem<UCharacterSubsystem>();
 	check(CharacterSubsystem);
+	CharacterSubsystem->OnPartyConstructed.AddLambda([this]()
+		{
+			OnPartyReady();
+		});
 }
 
 void ARPGGameMode::BeginPlay()
@@ -52,6 +56,16 @@ void ARPGGameMode::StartGameSession(const FString& SlotName)
 	UISubsystem->CloseAllUI();
 }
 
+void ARPGGameMode::TeleportTo(const FGameZoneContext& NewGameZoneContext)
+{
+	LoadingScreenSubsystem->StartLoadingScreen();
+	
+	GameZoneSubsystem->EnterGameZone(NewGameZoneContext, TDelegate<void()>::CreateLambda([this, NewGameZoneContext]()
+		{
+			CharacterSubsystem->SpawnPartyMembers(GameZoneSubsystem->GetSaveGameTransform(), true, ESpawnPartyMode::ByPlayerPartyIndex);
+		}));
+}
+
 void ARPGGameMode::AwakenSpawnablePoints()
 {
 	for (TActorIterator<ASpawnablePoint> It(GetWorld()); It; ++It)
@@ -66,66 +80,11 @@ void ARPGGameMode::AwakenSpawnablePoints()
 
 void ARPGGameMode::OnSaveGameLoaded_Implementation()
 {
-	FVector SpawnLocation = FVector::ZeroVector;
-	FRotator SpawnRotation = FRotator::ZeroRotator;
-
-	const FGameZoneContext& CurrentContext = GameZoneSubsystem->GetCurrentContext();
-
-	// If we have a saved transform, use that for spawning
-	if (CurrentContext.bUseSavedTransform)
-	{
-		SpawnLocation = CurrentContext.SavedTransform.GetLocation();
-		SpawnRotation = CurrentContext.SavedTransform.GetRotation().Rotator();
-	}
-	// Otherwise, find a PlayerStart with a matching tag
-	else
-	{
-		for (TActorIterator<ARPGPlayerStart> It(GetWorld()); It; ++It)
-		{
-			ARPGPlayerStart* Start = *It;
-			if (!Start)
-			{
-				continue;
-			}
-
-			UE_LOG(LogRPGGameMode, Display, TEXT(
-				"Found PlayerStart [%s] in World [%s], Tag: [%s], Level: [%s]"
-			),
-				*It->GetName(),
-				*It->GetWorld()->GetName(),
-				*It->PlayerStartTag.ToString(),
-				*GetNameSafe(It->GetLevel()));
-
-			if (Start->PlayerStartTag == CurrentContext.EntryPointTag)
-			{
-				SpawnLocation = Start->GetActorLocation();
-				SpawnRotation = Start->GetActorRotation();
-				break;
-			}
-		}
-	}
-
 	// Awaken spawn points
 	AwakenSpawnablePoints();
 
 	// Spawn party members
-	CharacterSubsystem->SpawnPartyMembers(SpawnLocation, SpawnRotation, true, ESpawnPartyMode::ByPlayerPartyIndex);
-
-	// Possess the player character
-	if (ABaseCharacter* CurrentCharacter = CharacterSubsystem->GetPlayerCharacter())
-	{
-		if (ARPGPlayerController* PC = Cast<ARPGPlayerController>(UGameplayStatics::GetPlayerController(this, 0)))
-		{
-			PC->PossessCharacter(CurrentCharacter, ERPGControlMode::None);
-		}
-	}
-	else
-	{
-		UE_LOG(LogRPGGameMode, Warning, TEXT("No player character found in CharacterSubsystem!"));
-	}
-
-	// TODO: Maybe wait for character spawning to complete before stopping the loading screen
-	LoadingScreenSubsystem->StopLoadingScreen();
+	CharacterSubsystem->SpawnPartyMembers(GameZoneSubsystem->GetSaveGameTransform(), true, ESpawnPartyMode::ByPlayerPartyIndex);
 }
 
 void ARPGGameMode::CreateMainMenuWidget_Implementation()
@@ -145,10 +104,29 @@ void ARPGGameMode::CreateMainMenuWidget_Implementation()
 	}
 }
 
-void ARPGGameMode::OnLoadingScreenStopped()
+void ARPGGameMode::OnStoppedLoading_Implementation()
 {
+	// TODO: 未來採用更好的方式切換控制狀態
 	if (ARPGPlayerController* PC = Cast<ARPGPlayerController>(UGameplayStatics::GetPlayerController(this, 0)))
 	{
 		PC->SetControlMode(ERPGControlMode::Gameplay);
 	}
+}
+
+void ARPGGameMode::OnPartyReady()
+{
+	// Possess the player character
+	if (ABaseCharacter* CurrentCharacter = CharacterSubsystem->GetPlayerCharacter())
+	{
+		if (ARPGPlayerController* PC = Cast<ARPGPlayerController>(UGameplayStatics::GetPlayerController(this, 0)))
+		{
+			PC->PossessCharacter(CurrentCharacter, ERPGControlMode::None);
+		}
+	}
+	else
+	{
+		UE_LOG(LogRPGGameMode, Warning, TEXT("No player character found in CharacterSubsystem!"));
+	}
+
+	LoadingScreenSubsystem->StopLoadingScreen();
 }

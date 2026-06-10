@@ -40,7 +40,8 @@ public class UIFramework : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
-				"UMG",
+				"GameplayAbilities",
+                "UMG",
 				"RPGCore",
                 
 				// ... add private dependencies that you statically link with here ...	

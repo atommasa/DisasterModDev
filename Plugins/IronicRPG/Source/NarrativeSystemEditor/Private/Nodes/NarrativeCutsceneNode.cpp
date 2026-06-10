@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Nodes/NarrativeCutsceneNode.h"
@@ -8,14 +8,52 @@ TSharedPtr<SGraphNode> UNarrativeCutsceneNode::CreateVisualWidget()
 	return SNew(SNarrativeCutsceneNode, this);
 }
 
-UEdGraphPin* UNarrativeCutsceneNode::CreateNarrativePin(EEdGraphPinDirection Direction, FName PinName)
+void UNarrativeCutsceneNode::AllocateDefaultPins()
 {
-	FName Category = (Direction == EGPD_Input) ? TEXT("Input") : TEXT("Output");
-	FName SubCategory = TEXT("NarrativePin");
+	SetNodeInfo(NewObject<UNarrativeCutsceneNodeInfo>(this));
 
-	UEdGraphPin* NewPin = CreatePin(Direction, Category, PinName);
-	NewPin->PinType.PinSubCategory = SubCategory;
-
-	return NewPin;
+	CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
+	CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, TEXT(""));
 }
 
+TSharedRef<SWidget> SNarrativeCutsceneNode::CreateNarrativeNodeCenterContent()
+{
+	UNarrativeCutsceneNode* CutsceneNode = Cast<UNarrativeCutsceneNode>(GraphNode);
+	if (!CutsceneNode)
+	{
+		return SNullWidget::NullWidget;
+	}
+
+	UNarrativeCutsceneNodeInfo* CutsceneNodeInfo = CutsceneNode->GetNodeInfoAs<UNarrativeCutsceneNodeInfo>();
+	if (!CutsceneNodeInfo)
+	{
+		return SNullWidget::NullWidget;
+	}
+
+	if (!CutsceneNodeInfo->Cutscene)
+	{
+		return SNew(SVerticalBox)
+			+ SVerticalBox::Slot()
+			.VAlign(VAlign_Center)
+			.FillContentHeight(50)
+			[
+				SNew(STextBlock)
+					.Text(FText::FromString(TEXT("NO CUTSCENE TO PLAY")))
+					.TextStyle(FAppStyle::Get(), "NormalText")
+					.Font(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 10, "Bold"))
+					.ColorAndOpacity(FSlateColor(FLinearColor(1.0f, 0.05f, 0.05f, 1.0f)))
+			];
+	}
+
+	return SNew(SVerticalBox)
+		+ SVerticalBox::Slot()
+		.VAlign(VAlign_Center)
+		.FillContentHeight(50)
+		[
+			SNew(STextBlock)
+				.Text(FText::FromString(FString::Printf(TEXT("Play %s"), *CutsceneNodeInfo->Cutscene->GetName())))
+				.TextStyle(FAppStyle::Get(), "NormalText")
+				.Font(FSlateFontInfo(FCoreStyle::GetDefaultFont(), 10, "Bold"))
+				.ColorAndOpacity(FSlateColor(FLinearColor::Gray))
+		];
+}

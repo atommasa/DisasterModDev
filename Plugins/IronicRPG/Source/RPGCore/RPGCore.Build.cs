@@ -35,6 +35,7 @@ public class RPGCore : ModuleRules
                 "NavigationSystem",
                 "GameplayAbilities",
                 "GameplayTasks",
+                "Chooser",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

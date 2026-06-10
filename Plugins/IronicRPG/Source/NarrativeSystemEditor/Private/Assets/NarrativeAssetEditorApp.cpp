@@ -1,4 +1,4 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Assets/NarrativeAssetEditorApp.h"
@@ -6,10 +6,10 @@
 #include "NarrativeAsset.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "NarrativeGraphSchema.h"
-#include "NarrativeGraphNode.h"
+#include "Nodes/NarrativeDialogueNode.h"
 #include "NarrativeRuntimeGraph.h"
 #include "Nodes/NarrativeStartGraphNode.h"
-#include "Nodes/NarrativePlayerGraphNode.h"
+#include "Nodes/NarrativePlayerOptionsNode.h"
 #include "Framework/Commands/GenericCommands.h"
 #include "Editor/Transactor.h"
 #include "HAL/PlatformApplicationMisc.h"
@@ -17,11 +17,13 @@
 #include "NarrativeTextParser.h"
 #include "Kismet2/KismetEditorUtilities.h"
 #include "Toolkits/ToolkitManager.h"
-#include "Narrative/NarrativeEventBlueprintBase.h"
+#include "Narrative/Dialogue.h"
 #include "SBlueprintEditorToolbar.h"
 #include "Kismet2/DebuggerCommands.h"
 #include "EngineAnalytics.h"
 #include "Nodes/NarrativeCutsceneNode.h"
+#include "Blueprints/DialogueBlueprintGeneratedClass.h"
+#include "NarrativeEditorUtils.h"
 
 DEFINE_LOG_CATEGORY_STATIC(LogNarrativeAssetEditor, Log, All);
 
@@ -114,6 +116,11 @@ void NarrativeAssetEditorApp::InitBlueprintEditor(const EToolkitMode::Type Mode,
         return;
     }
 
+    _WorkingAsset->SetPreSaveListener([this]()
+        {
+            UpdateWorkingAssetFromGraph();
+        });
+
     FKismetEditorUtilities::CompileBlueprint(_WorkingAsset);
 
     if (bNewlyCreated)
@@ -154,23 +161,50 @@ void NarrativeAssetEditorApp::InitBlueprintEditor(const EToolkitMode::Type Mode,
 
     CreateGraphEditorCommands();
 
+    // TODO: Êú™‰æÜËÄÉÊÖÆÊõ¥ÂØ¶ÈöõÁöÑÂà§Êñ∑ÈÇèËºØ
+    const FName& DialogueGraphName = FName(TEXT("DialogueGraph"));
+    const FName& EventGraphName = FName(TEXT("DialogueEventGraph"));
+
+    TArray<UEdGraph*> Graphs;
+    _WorkingAsset->GetAllGraphs(Graphs);
+    for (UEdGraph* Graph : Graphs)
+    {
+        if (!Graph)
+        {
+            continue;
+        }
+
+        const bool bIsNarrativeGraph = Graph->GetSchema() && Graph->GetSchema()->IsA<UNarrativeGraphSchema>();
+
+        const bool bIsKnownNarrativeGraph = Graph->GetFName() == DialogueGraphName || Graph->GetFName() == EventGraphName;
+
+        if (bIsNarrativeGraph && !bIsKnownNarrativeGraph)
+        {
+            FBlueprintEditorUtils::RemoveGraph(_WorkingAsset, Graph);
+            _WorkingAsset->LastEditedDocuments.Remove(Graph);
+        }
+    }
+
     // Only create if no graph exists
-    const FName& GraphName = FName(TEXT("Dialogue Graph"));
-    UObject* ExistingObject = FindObject<UObject>(_WorkingAsset, *(GraphName.ToString()));
+    UObject* ExistingObject = FindObject<UObject>(_WorkingAsset, *(DialogueGraphName.ToString()));
     if (!ExistingObject)
     {
         _WorkingGraph = FBlueprintEditorUtils::CreateNewGraph(
             _WorkingAsset,
-            GraphName,
+            DialogueGraphName,
             UEdGraph::StaticClass(),
             UNarrativeGraphSchema::StaticClass()
         );
 
         _WorkingGraph->bAllowDeletion = false;
+        _WorkingGraph->bAllowRenaming = false;
+        
         FBlueprintEditorUtils::AddUbergraphPage(_WorkingAsset, _WorkingGraph);
         _WorkingAsset->LastEditedDocuments.AddUnique(_WorkingGraph);
         
         _WorkingGraph->GetSchema()->CreateDefaultNodesForGraph(*_WorkingGraph);
+    
+        FKismetEditorUtilities::BringKismetToFocusAttentionOnObject(_WorkingGraph);
     }
     else if (ExistingObject->IsA<UEdGraph>())
     {
@@ -178,7 +212,7 @@ void NarrativeAssetEditorApp::InitBlueprintEditor(const EToolkitMode::Type Mode,
     }
     
     // Load the UI from the asset
-    UpdateEditorGraphFromWorkingAsset();
+    // RebuildEditorGraphFromRuntimeGraph();
 }
 
 FGraphPanelSelectionSet NarrativeAssetEditorApp::GetSelectedNodes() const
@@ -199,8 +233,15 @@ void NarrativeAssetEditorApp::LoadEditorSettings()
 
 void NarrativeAssetEditorApp::SetSelectedNodeDetailView(TSharedPtr<class IDetailsView> InDetailView)
 {
-    /*_SelectedNodeDetailView = InDetailView;
-    _SelectedNodeDetailView->OnFinishedChangingProperties().AddRaw(this, &NarrativeAssetEditorApp::OnNodeDetailViewPropertiesUpdated);*/
+    _SelectedNodeDetailView = InDetailView;
+    
+    /*if (_SelectedNodeDetailView.IsValid())
+    {
+        _SelectedNodeDetailView->OnFinishedChangingProperties().AddRaw(
+            this,
+            &NarrativeAssetEditorApp::OnNodeDetailViewPropertiesUpdated
+        );
+    }*/
 }
 
 void NarrativeAssetEditorApp::OnGraphEditorFocused(const TSharedRef<class SGraphEditor>& InGraphEditor)
@@ -245,49 +286,93 @@ void NarrativeAssetEditorApp::OnSelectedNodesChangedImpl(const TSet<class UObjec
 
 void NarrativeAssetEditorApp::OnFinishedChangingProperties(const FPropertyChangedEvent& PropertyChangedEvent)
 {
-	FBlueprintEditor::OnFinishedChangingProperties(PropertyChangedEvent);
-
-    if (UBlueprint* Blueprint = GetBlueprintObj())
+    FBlueprintEditor::OnFinishedChangingProperties(PropertyChangedEvent);
+    
+    UBlueprint* Blueprint = GetBlueprintObj();
+    if (!Blueprint)
     {
-        // º–∞O Blueprint Dirty°]PackageDirty + ≠´∑sΩsƒ∂¥£•‹°^
-        Blueprint->Modify();
-        Blueprint->MarkPackageDirty();
-        FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
-
-        // ´ÿƒ≥°G•≤≠nÆ…§]•i•HøÔæ‹±j®Ó≠´∑sΩsƒ∂
-        // FKismetEditorUtilities::CompileBlueprint(Blueprint);
+        return;
     }
+
+    Blueprint->Modify();
+
+    if (Blueprint->GeneratedClass)
+    {
+        UObject* CDO = Blueprint->GeneratedClass->GetDefaultObject();
+        if (CDO)
+        {
+            CDO->Modify();
+        }
+    }
+    
+    if (_WorkingGraphUI)
+    {
+        UNarrativeGraphNodeBase* NodePtr = GetSelectedNode(_WorkingGraphUI->GetSelectedNodes());
+        if (UNarrativePlayerOptionsNode* PlayerOptionsNode = Cast<UNarrativePlayerOptionsNode>(NodePtr))
+        {
+            PlayerOptionsNode->Modify();
+            
+            if (PlayerOptionsNode->GetNodeInfo())
+            {
+                PlayerOptionsNode->GetNodeInfo()->Modify();
+            }
+
+            PlayerOptionsNode->SyncPin();
+        }
+    }
+
+    FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+    Blueprint->MarkPackageDirty();
+
+    UE_LOG(
+        LogTemp,
+        Warning,
+        TEXT("Narrative Class Defaults changed. BP=%s Package=%s Property=%s"),
+        *GetNameSafe(Blueprint),
+        *Blueprint->GetOutermost()->GetName(),
+        PropertyChangedEvent.Property ? *PropertyChangedEvent.Property->GetName() : TEXT("None")
+    );
 }
 
 void NarrativeAssetEditorApp::OnClose()
 {
-    //UpdateWorkingAssetFromGraph();
-	_WorkingAsset->SetPreSaveListener(nullptr);
+    if (_WorkingAsset)
+    {
+        UpdateWorkingAssetFromGraph();
+        _WorkingAsset->SetPreSaveListener(nullptr);
+        _WorkingAsset->MarkPackageDirty();
+    }
+
     FAssetEditorToolkit::OnClose();
 }
 
-void NarrativeAssetEditorApp::OnNodeDetailViewPropertiesUpdated(const FPropertyChangedEvent& Event)
-{
-    if (_WorkingGraphUI)
-    {
-        // Get the node being modified
-        UNarrativeGraphNodeBase* DialogNode = GetSelectedNode(_WorkingGraphUI->GetSelectedNodes());
-        if (UNarrativePlayerGraphNode* PlayerGraphNode = Cast<UNarrativePlayerGraphNode>(DialogNode))
-        {
-            PlayerGraphNode->Modify();
-            
-            if (PlayerGraphNode->GetNodeInfo())
-            {
-                PlayerGraphNode->GetNodeInfo()->Modify();
-            }
-
-            PlayerGraphNode->SyncPinWithResponse();
-
-        }
-
-        _WorkingGraphUI->NotifyGraphChanged();
-    }
-}
+//void NarrativeAssetEditorApp::OnNodeDetailViewPropertiesUpdated(const FPropertyChangedEvent& Event)
+//{
+//    if (_WorkingGraphUI)
+//    {
+//        UNarrativeGraphNodeBase* NodePtr = GetSelectedNode(_WorkingGraphUI->GetSelectedNodes());
+//        if (UNarrativePlayerOptionsNode* PlayerOptionsNode = Cast<UNarrativePlayerOptionsNode>(NodePtr))
+//        {
+//            PlayerOptionsNode->Modify();
+//
+//            if (PlayerOptionsNode->GetNodeInfo())
+//            {
+//                PlayerOptionsNode->GetNodeInfo()->Modify();
+//            }
+//
+//            PlayerOptionsNode->SyncPin();
+//        }
+//
+//        _WorkingGraphUI->NotifyGraphChanged();
+//    }
+//
+//    if (_WorkingAsset)
+//    {
+//        _WorkingAsset->Modify();
+//        _WorkingAsset->MarkPackageDirty();
+//        FBlueprintEditorUtils::MarkBlueprintAsModified(_WorkingAsset);
+//    }
+//}
 
 void NarrativeAssetEditorApp::OnWorkingAssetPreSave(const FEdGraphEditAction& InAction)
 {
@@ -579,14 +664,14 @@ void NarrativeAssetEditorApp::PasteDialogueTextAsNodes(UEdGraph* Graph, const FS
 
     const float NodeSpacingX = 300.0f;
 
-    TArray<UNarrativeGraphNode*> Nodes;
+    TArray<UNarrativeDialogueNode*> Nodes;
     FVector2D CurrentLocation = PasteLocation;
 
     // Create Nodes
     for (const FParsedDialogueLine& DialogueLine : DialogueLines)
     {
 		// Create a new node
-        UNarrativeGraphNode* DialogueGraphNode = NewObject<UNarrativeGraphNode>(Graph);
+        UNarrativeDialogueNode* DialogueGraphNode = NewObject<UNarrativeDialogueNode>(Graph);
         DialogueGraphNode->CreateNewGuid();
         DialogueGraphNode->NodePosX = CurrentLocation.X;
         DialogueGraphNode->NodePosY = CurrentLocation.Y;
@@ -594,7 +679,7 @@ void NarrativeAssetEditorApp::PasteDialogueTextAsNodes(UEdGraph* Graph, const FS
 		// Create Node Info
         auto* NodeInfo = NewObject<UNarrativeDialogueNodeInfo>(DialogueGraphNode);
         NodeInfo->Dialogue = FText::FromString(DialogueLine.Dialogue);
-        NodeInfo->SpeakerId = FName(DialogueLine.Speaker);
+		NodeInfo->SpeakerName = FText::FromString(DialogueLine.Speaker);
 
         DialogueGraphNode->SetNodeInfo(NodeInfo);
 
@@ -612,9 +697,9 @@ void NarrativeAssetEditorApp::PasteDialogueTextAsNodes(UEdGraph* Graph, const FS
 	// Connect Nodes
     for (int32 i = 0; i < Nodes.Num(); i++)
     {
-        UNarrativeGraphNode* FromNodePtr = nullptr;
-        UNarrativeGraphNode* ToNodePtr = nullptr;
-        
+        UNarrativeDialogueNode* FromNodePtr = nullptr;
+        UNarrativeDialogueNode* ToNodePtr = nullptr;
+
         if (Nodes.IsValidIndex(i + 1))
         {
             FromNodePtr = Nodes[i + 1];
@@ -654,7 +739,7 @@ void NarrativeAssetEditorApp::PostUndo(bool bSuccess)
         {
             if (UNarrativeGraphNodeBase* NarrativeNode = Cast<UNarrativeGraphNodeBase>(Node))
             {
-                NarrativeNode->SyncPinWithResponse();
+                NarrativeNode->SyncPin();
             }
         }
 
@@ -672,14 +757,9 @@ void NarrativeAssetEditorApp::PostRedo(bool bSuccess)
 
         for (UEdGraphNode* Node : _WorkingGraph->Nodes)
         {
-            if (UNarrativePlayerGraphNode* PlayerNode = Cast<UNarrativePlayerGraphNode>(Node))
+            if (UNarrativePlayerOptionsNode* PlayerOptionsNode = Cast<UNarrativePlayerOptionsNode>(Node))
             {
-                PlayerNode->SyncPinWithResponse();
-            }
-            else if (UNarrativeGraphNode* DialogueNode = Cast<UNarrativeGraphNode>(Node))
-            {
-                // ¶p™G DialogueNode §]¶≥ sync ®Á¶°
-                // DialogueNode->SyncPins(); // •iøÔ
+                PlayerOptionsNode->SyncPin();
             }
         }
 
@@ -723,10 +803,8 @@ bool NarrativeAssetEditorApp::CanRedo()
 
 void NarrativeAssetEditorApp::OpenEventGraph()
 {
-    // ΩT´O§w∏g´ÿ•ﬂ Factory
     const FName EventTabName = FName("EventGraphTab");
 
-    // ©I•s AssetEditorToolkit ™∫ OpenTab
     TSharedPtr<FTabManager> Manager = GetTabManager();
     if (Manager.IsValid())
     {
@@ -739,56 +817,38 @@ void NarrativeAssetEditorApp::OpenEventGraph()
     }
 }
 
-UBlueprint* NarrativeAssetEditorApp::CreateSharedEventBlueprint()
+UObject* NarrativeAssetEditorApp::GetClassDefaultsObject() const
 {
-    if (!_WorkingAsset)
+    UDialogueBlueprint* DialogueBP = Cast<UDialogueBlueprint>(_WorkingAsset);
+    if (!DialogueBP)
     {
-        UE_LOG(LogTemp, Error, TEXT("Working asset is null."));
         return nullptr;
     }
 
-    // Use the transient package safely
-    UPackage* TransientPackage = GetTransientPackage();
-
-    // Create Blueprint
-    UBlueprint* Blueprint = FKismetEditorUtilities::CreateBlueprint(
-        UDialogue::StaticClass(),
-        TransientPackage,
-        FName("NarrativeAsset_BP"),
-        EBlueprintType::BPTYPE_Normal,
-        UBlueprint::StaticClass(),
-        UBlueprintGeneratedClass::StaticClass(),
-        FName("NarrativeEventBlueprint")
-    );
-
-    if (!Blueprint)
+    UClass* GeneratedClass = DialogueBP->GeneratedClass;
+    if (!GeneratedClass)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create Blueprint."));
         return nullptr;
     }
 
-    // Create EventGraph (Ubergraph)
-    UEdGraph* EventGraph = FBlueprintEditorUtils::CreateNewGraph(
-        Blueprint,
-        FBlueprintEditorUtils::GenerateUniqueGraphName(Blueprint, "Event Graph"),
-        UEdGraph::StaticClass(),
-        UEdGraphSchema_K2::StaticClass()
-    );
+    return GeneratedClass->GetDefaultObject();
+}
 
-    if (!EventGraph)
+UBlueprint* NarrativeAssetEditorApp::GetSharedEventBlueprint()
+{
+    return _WorkingAsset;
+}
+
+UEdGraph* NarrativeAssetEditorApp::GetOrCreateSharedEventGraph()
+{
+    UDialogueBlueprint* DialogueBP = Cast<UDialogueBlueprint>(_WorkingAsset);
+    if (!DialogueBP)
     {
-        UE_LOG(LogTemp, Error, TEXT("Failed to create EventGraph."));
+        UE_LOG(LogTemp, Error, TEXT("Working asset is not a valid UDialogueBlueprint."));
         return nullptr;
     }
 
-    EventGraph->bAllowDeletion = false;
-    EventGraph->SetFlags(RF_Transactional);
-
-    // Add to blueprint
-    FBlueprintEditorUtils::AddUbergraphPage(Blueprint, EventGraph);
-    Blueprint->LastEditedDocuments.Add(EventGraph);
-
-    return Blueprint;
+	return FNarrativeEditorUtils::GetOrCreateGraph(DialogueBP, FName(TEXT("DialogueEventGraph"))); // TODO: ‰πãÂæåËÄÉÊÖÆ‰∏çÂØ´Ê≠ª
 }
 
 void NarrativeAssetEditorApp::UpdateWorkingAssetFromGraph()
@@ -808,10 +868,25 @@ void NarrativeAssetEditorApp::UpdateWorkingAssetFromGraph()
     // First create all the nodes/pins and record the connections
     for (UEdGraphNode* UINode : _WorkingGraph->Nodes)
     {
-        UNarrativeRuntimeNode* RuntimeNode = NewObject<UNarrativeRuntimeNode>(RuntimeGraph);
-        RuntimeNode->Position = FVector2D(UINode->NodePosX, UINode->NodePosY);
+        UNarrativeGraphNodeBase* UINarrativeNode = Cast<UNarrativeGraphNodeBase>(UINode);
+        if (!UINarrativeNode)
+        {
+            continue;
+        }
 
-        for (UEdGraphPin* UIPin : UINode->Pins)
+        UNarrativeRuntimeNode* RuntimeNode = NewObject<UNarrativeRuntimeNode>(RuntimeGraph);
+        RuntimeNode->Position = FVector2D(UINarrativeNode->NodePosX, UINarrativeNode->NodePosY);
+
+        RuntimeNode->NodeType = UINarrativeNode->GetNarrativeNodeType();
+        
+        if (UNarrativeNodeInfo* SourceInfo = UINarrativeNode->GetNodeInfo())
+        {
+            RuntimeNode->NodeInfo = DuplicateObject<UNarrativeNodeInfo>(SourceInfo, RuntimeNode);
+        }
+
+        RuntimeNode->NodeGuid = UINarrativeNode->NodeGuid;
+
+        for (UEdGraphPin* UIPin : UINarrativeNode->Pins)
         {
             UNarrativeRuntimePin* RuntimePin = NewObject<UNarrativeRuntimePin>(RuntimeNode);
             RuntimePin->PinName = UIPin->PinName;
@@ -837,31 +912,6 @@ void NarrativeAssetEditorApp::UpdateWorkingAssetFromGraph()
             }
         }
 
-        if (UINode->IsA(UNarrativeGraphNode::StaticClass()))
-        {
-			UNarrativeGraphNode* NarrativeNode = Cast<UNarrativeGraphNode>(UINode);
-			RuntimeNode->NodeType = ENarrativeNodeType::DialogueNode;
-            RuntimeNode->NodeInfo = NarrativeNode->GetNodeInfo();
-		}
-        else if (UINode->IsA(UNarrativePlayerGraphNode::StaticClass()))
-        {
-            UNarrativePlayerGraphNode* NarrativeNode = Cast<UNarrativePlayerGraphNode>(UINode);
-            RuntimeNode->NodeType = ENarrativeNodeType::PlayerNode;
-            RuntimeNode->NodeInfo = NarrativeNode->GetNodeInfo();
-        }
-        else if (UINode->IsA(UNarrativeStartGraphNode::StaticClass()))
-		{
-			RuntimeNode->NodeType = ENarrativeNodeType::StartNode;
-		}
-		else if (UINode->IsA(UNarrativeCutsceneNode::StaticClass()))
-		{
-			RuntimeNode->NodeType = ENarrativeNodeType::CutsceneNode;
-		}
-		else
-		{
-			RuntimeNode->NodeType = ENarrativeNodeType::UnknownNode;
-        }
-
         RuntimeGraph->Nodes.Add(RuntimeNode);
     }
 
@@ -877,7 +927,7 @@ void NarrativeAssetEditorApp::UpdateWorkingAssetFromGraph()
     }
 }
 
-void NarrativeAssetEditorApp::UpdateEditorGraphFromWorkingAsset()
+void NarrativeAssetEditorApp::RebuildEditorGraphFromRuntimeGraph()
 {
     if (!_WorkingAsset->Graph)
     {
@@ -885,44 +935,44 @@ void NarrativeAssetEditorApp::UpdateEditorGraphFromWorkingAsset()
         return;
     }
 
+    TArray<UClass*> NodeClasses;
+    GetDerivedClasses(UNarrativeGraphNodeBase::StaticClass(), NodeClasses);
+
     // Create all the nodes/pins first
     TArray<std::pair<FGuid, FGuid>> Connections;
     TMap<FGuid, UEdGraphPin*> IDToPinMap;
     for (UNarrativeRuntimeNode* RuntimeNode : _WorkingAsset->Graph->Nodes)
     {
         UNarrativeGraphNodeBase* NewNode = nullptr;
-		if (RuntimeNode->NodeType == ENarrativeNodeType::StartNode)
-		{
-			NewNode = NewObject<UNarrativeStartGraphNode>(_WorkingGraph);
-		}
-        else if (RuntimeNode->NodeType == ENarrativeNodeType::DialogueNode)
-        {
-            NewNode = NewObject<UNarrativeGraphNode>(_WorkingGraph);
-        }
-        else if (RuntimeNode->NodeType == ENarrativeNodeType::PlayerNode)
-        {
-            NewNode = NewObject<UNarrativePlayerGraphNode>(_WorkingGraph);
-        }
-        else if (RuntimeNode->NodeType == ENarrativeNodeType::CutsceneNode)
-        {
-            NewNode = NewObject<UNarrativeCutsceneNode>(_WorkingGraph);
-        }
-		else
-		{
-			UE_LOG(LogNarrativeAssetEditor, Warning, TEXT(__FUNCTION__": Unknown node type %d"), (int32)RuntimeNode->NodeType);
-			continue;
-		}
 
-        NewNode->SetFlags(RF_Transactional);
-        NewNode->Rename(nullptr, _WorkingGraph, REN_NonTransactional);
+        for (UClass* NodeClass : NodeClasses)
+        {
+            UNarrativeGraphNodeBase* CDONode = NodeClass->GetDefaultObject<UNarrativeGraphNodeBase>();
+            if (CDONode && CDONode->GetNarrativeNodeType() == RuntimeNode->NodeType)
+            {
+                NewNode = NewObject<UNarrativeGraphNodeBase>(
+                    _WorkingGraph,
+                    NodeClass,
+                    NAME_None,
+                    RF_Transactional
+                );
 
-        NewNode->CreateNewGuid();
+                break;
+            }
+        }
+
+        if (!NewNode)
+        {
+            continue;
+        }
+
+        NewNode->NodeGuid = RuntimeNode->NodeGuid;
         NewNode->NodePosX = RuntimeNode->Position.X;
         NewNode->NodePosY = RuntimeNode->Position.Y;
 
 		if (RuntimeNode->NodeInfo)
 		{
-            NewNode->SetNodeInfo(DuplicateObject(RuntimeNode->NodeInfo, RuntimeNode));
+            NewNode->SetNodeInfo(DuplicateObject(RuntimeNode->NodeInfo, NewNode));
 		}
 		else if (RuntimeNode->NodeType != ENarrativeNodeType::StartNode)
 		{

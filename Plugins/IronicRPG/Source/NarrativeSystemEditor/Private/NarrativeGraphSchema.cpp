@@ -1,64 +1,67 @@
-// Fill out your copyright notice in the Description page of Project Settings.
+// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "NarrativeGraphSchema.h"
-#include "NarrativeGraphNode.h"
 #include "ToolMenus.h"
+#include "Kismet2/BlueprintEditorUtils.h"
 #include "GraphEditorActions.h"
 #include "EdGraph/EdGraph.h"
-#include "Nodes/NarrativeNodeInfo.h"
+#include "Nodes/NarrativeDialogueNode.h"
 #include "Nodes/NarrativeDialogueNodeInfo.h"
-#include "Nodes/NarrativePlayerNodeInfo.h"
-#include "NarrativeAsset.h"
 #include "Nodes/NarrativeStartGraphNode.h"
-#include "Nodes/NarrativePlayerGraphNode.h"
-#include "HAL/PlatformApplicationMisc.h"
-#include "NarrativeTextParser.h"
-#include "Framework/Commands/GenericCommands.h"
-#include "BlueprintNodeSpawner.h"
+#include "Nodes/NarrativePlayerOptionsNode.h"
+#include "Nodes/NarrativeBranchNode.h"
+#include "Nodes/NarrativeSetVariablesNode.h"
 #include "Nodes/NarrativeCutsceneNode.h"
-#include "Nodes/NarrativeCutsceneNodeInfo.h"
-#include "NarrativeEditorSubsystem.h"
-#include "Characters/CharacterAsset.h"
+#include "Nodes/NarrativeNodeKnot.h"
+#include "Framework/Commands/GenericCommands.h"
+#include "Rendering/DrawElements.h"
+#include "Styling/AppStyle.h"
 
 void UNarrativeGraphSchema::GetGraphContextActions(FGraphContextMenuBuilder& ContextMenuBuilder) const
 {
-	auto* NarrativeEditorSubsystem = GEditor->GetEditorSubsystem<UNarrativeEditorSubsystem>();
-	if (!NarrativeEditorSubsystem)
+	UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForGraph(ContextMenuBuilder.CurrentGraph);
+	if (!Blueprint || !Blueprint->GeneratedClass)
 	{
 		return;
 	}
 
-	auto Assets = NarrativeEditorSubsystem->TryGetSpeakerAssets();
+	UDialogue* Dialogue = Cast<UDialogue>(Blueprint->GeneratedClass->GetDefaultObject());
+	if (!Dialogue)
+	{
+		return;
+	}
 
 	// Create a new action for dialog nodes
-	for (const auto& Asset : Assets)
+	for (const FSpeakerData& Data : Dialogue->Speakers)
 	{
+		FText DisplayName = Data.GetSpeakerDisplayName();
+
 		TSharedPtr<FNewNodeAction> NewNodeAction =
 			MakeShareable(new FNewNodeAction
 			(
-				FText::FromString(TEXT("Dialog Nodes")),
+				FText::FromString(TEXT("Dialogue Nodes")),
 				FText::Format(
-					NSLOCTEXT("NarrativeEditor", "AddNarrativeNode", "Add narrative node for {0}"),
-					Asset.Value->GetDisplayName().DefaultName
+					NSLOCTEXT("NarrativeEditor", "AddNarrativeNode", "Add dialogue node for {0}"),
+					DisplayName
 				),
-				FText::FromString(TEXT("Makes a new node")),
-				0
+				FText::FromString(TEXT("Makes a new dialogue node")),
+				UNarrativeDialogueNode::StaticClass()
 			));
-		
-		NewNodeAction->NodeName = Asset.Value->GetId().Id;
+
+		NewNodeAction->SpeakerData = Data;
 
 		ContextMenuBuilder.AddAction(NewNodeAction);
 	}
 
-	// Create a new action for player nodes
+	// Create a new action for player options nodes
 	TSharedPtr<FNewNodeAction> NewPlayerNodeAction =
 		MakeShareable(new FNewNodeAction
 		(
-			FText::FromString(TEXT("Player Nodes")),
-			NSLOCTEXT("NarrativeEditor", "AddPlayerNode", "Add player node"),
-			NSLOCTEXT("NarrativeEditor", "AddPlayerNodeTooltip", "Makes a new player node"),
-			1
+			FText::FromString(TEXT("Dialogue Nodes")),
+			NSLOCTEXT("NarrativeEditor", "AddPlayerOptionsNode", "Add player options node"),
+			NSLOCTEXT("NarrativeEditor", "AddPlayerOptionsNodeTooltip", "Makes a new player options node"),
+			UNarrativePlayerOptionsNode::StaticClass()
 		));
 
 	ContextMenuBuilder.AddAction(NewPlayerNodeAction);
@@ -67,13 +70,49 @@ void UNarrativeGraphSchema::GetGraphContextActions(FGraphContextMenuBuilder& Con
 	TSharedPtr<FNewNodeAction> NewCutsceneNodeAction =
 		MakeShareable(new FNewNodeAction
 		(
-			FText::FromString(TEXT("Cutscene Nodes")),
+			FText::FromString(TEXT("Presentation Nodes")),
 			NSLOCTEXT("NarrativeEditor", "AddCutsceneNode", "Add cutscene node"),
 			NSLOCTEXT("NarrativeEditor", "AddCutsceneNodeTooltip", "Makes a new cutscene node"),
-			2
+			UNarrativeCutsceneNode::StaticClass()
 		));
 
 	ContextMenuBuilder.AddAction(NewCutsceneNodeAction);
+
+	// Create a new action for branch nodes
+	TSharedPtr<FNewNodeAction> NewBranchNodeAction =
+		MakeShareable(new FNewNodeAction
+		(
+			FText::FromString(TEXT("Flow Nodes")),
+			NSLOCTEXT("NarrativeEditor", "AddBranchNode", "Add branch node"),
+			NSLOCTEXT("NarrativeEditor", "AddBranchNodeTooltip", "Makes a new branch node"),
+			UNarrativeBranchNode::StaticClass()
+		));
+
+	ContextMenuBuilder.AddAction(NewBranchNodeAction);
+
+	// Create a new action for set variables nodes
+	TSharedPtr<FNewNodeAction> NewSetVariablesNodeAction =
+		MakeShareable(new FNewNodeAction
+		(
+			FText::FromString(TEXT("Game Logic Nodes")),
+			NSLOCTEXT("NarrativeEditor", "AddSetVariablesNode", "Add set variables node"),
+			NSLOCTEXT("NarrativeEditor", "AddSetVariablesTooltip", "Makes a new set variables node"),
+			UNarrativeSetVariablesNode::StaticClass()
+		));
+
+	ContextMenuBuilder.AddAction(NewSetVariablesNodeAction);
+
+	// Create a new action for reroute nodes
+	TSharedPtr<FNewNodeAction> NewRerouteNodeAction =
+		MakeShareable(new FNewNodeAction
+		(
+			FText::FromString(TEXT("")),
+			NSLOCTEXT("NarrativeEditor", "AddRerouteNode", "Add reroute node"),
+			NSLOCTEXT("NarrativeEditor", "AddRerouteNodeTooltip", "Makes a new reroute node"),
+			UNarrativeNodeKnot::StaticClass()
+		));
+
+	ContextMenuBuilder.AddAction(NewRerouteNodeAction);
 }
 
 void UNarrativeGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
@@ -96,22 +135,30 @@ void UNarrativeGraphSchema::GetContextMenuActions(UToolMenu* Menu, UGraphNodeCon
 
 const FPinConnectionResponse UNarrativeGraphSchema::CanCreateConnection(const UEdGraphPin* A, const UEdGraphPin* B) const
 {
-    if (A->Direction == B->Direction)
-    {
-        return FPinConnectionResponse(CONNECT_RESPONSE_DISALLOW, TEXT("Same direction not allowed."));
-    }
-
-	if (A->GetOwningNode() == B->GetOwningNode())
-	{
-		return FPinConnectionResponse(CONNECT_RESPONSE_DISALLOW, TEXT("Same owning node not allowed."));
-	}
-
-	if (A->Direction == EGPD_Output)
+	if (IsKnotToKnot(A, B))
 	{
 		return FPinConnectionResponse(CONNECT_RESPONSE_BREAK_OTHERS_A, TEXT("OK"));
 	}
 
-	if (B->Direction == EGPD_Output)
+	const UEdGraphPin* ResolvedA = ResolveKnotPinForOtherPinConst(A, B);
+	const UEdGraphPin* ResolvedB = ResolveKnotPinForOtherPinConst(B, ResolvedA);
+
+	if (ResolvedA->GetOwningNode() == ResolvedB->GetOwningNode())
+	{
+		return FPinConnectionResponse(CONNECT_RESPONSE_DISALLOW, TEXT("Same owning node not allowed."));
+	}
+
+	if (ResolvedA->Direction == ResolvedB->Direction)
+	{
+		return FPinConnectionResponse(CONNECT_RESPONSE_DISALLOW, TEXT("Same direction not allowed."));
+	}
+
+	if (ResolvedA->Direction == EGPD_Output)
+	{
+		return FPinConnectionResponse(CONNECT_RESPONSE_BREAK_OTHERS_A, TEXT("OK"));
+	}
+
+	if (ResolvedB->Direction == EGPD_Output)
 	{
 		return FPinConnectionResponse(CONNECT_RESPONSE_BREAK_OTHERS_B, TEXT("OK"));
 	}
@@ -119,14 +166,46 @@ const FPinConnectionResponse UNarrativeGraphSchema::CanCreateConnection(const UE
     return FPinConnectionResponse(CONNECT_RESPONSE_MAKE, TEXT("OK"));
 }
 
+bool UNarrativeGraphSchema::TryCreateConnection(UEdGraphPin* A, UEdGraphPin* B) const
+{
+	if (!A || !B)
+	{
+		return false;
+	}
+
+	if (IsKnotToKnot(A, B))
+	{
+		UEdGraphPin* KnotPinA = Cast<UNarrativeNodeKnot>(A->GetOwningNode())->GetOutputPin();
+		UEdGraphPin* KnotPinB = Cast<UNarrativeNodeKnot>(B->GetOwningNode())->GetInputPin();
+
+		return Super::TryCreateConnection(KnotPinA, KnotPinB);
+	}
+
+	UEdGraphPin* ResolvedA = ResolveKnotPinForOtherPin(A, B);
+	UEdGraphPin* ResolvedB = ResolveKnotPinForOtherPin(B, ResolvedA);
+
+	if (!ResolvedA || !ResolvedB)
+	{
+		return false;
+	}
+
+	if (ResolvedA == ResolvedB)
+	{
+		return false;
+	}
+
+	return Super::TryCreateConnection(ResolvedA, ResolvedB);
+}
+
 void UNarrativeGraphSchema::CreateDefaultNodesForGraph(UEdGraph& Graph) const
 {
 	UNarrativeStartGraphNode* StartNode = NewObject<UNarrativeStartGraphNode>(&Graph);
+	
 	StartNode->CreateNewGuid();
 	StartNode->NodePosX = 0;
 	StartNode->NodePosY = 0;
 
-	StartNode->CreateNarrativePin(EGPD_Output, TEXT(""));
+	StartNode->AllocateDefaultPins();
 
 	Graph.AddNode(StartNode, true, true);
 	Graph.Modify();
@@ -153,98 +232,376 @@ void UNarrativeGraphSchema::BreakSinglePinLink(UEdGraphPin* SourcePin, UEdGraphP
 	Super::BreakSinglePinLink(SourcePin, TargetPin);
 }
 
+void UNarrativeGraphSchema::OnPinConnectionDoubleCicked(UEdGraphPin* PinA, UEdGraphPin* PinB, const FVector2D& GraphPosition) const
+{
+	if (!PinA || !PinB)
+	{
+		return;
+	}
+
+	UEdGraphNode* NodeA = PinA->GetOwningNode();
+	UEdGraphNode* NodeB = PinB->GetOwningNode();
+
+	if (!NodeA || !NodeB)
+	{
+		return;
+	}
+
+	UEdGraph* Graph = NodeA->GetGraph();
+	if (!Graph || Graph != NodeB->GetGraph())
+	{
+		return;
+	}
+
+	UEdGraphPin* OutputPin = nullptr;
+	UEdGraphPin* InputPin = nullptr;
+
+	if (PinA->Direction == EGPD_Output && PinB->Direction == EGPD_Input)
+	{
+		OutputPin = PinA;
+		InputPin = PinB;
+	}
+	else if (PinB->Direction == EGPD_Output && PinA->Direction == EGPD_Input)
+	{
+		OutputPin = PinB;
+		InputPin = PinA;
+	}
+	else
+	{
+		return;
+	}
+
+	const FScopedTransaction Transaction(
+		NSLOCTEXT("Narrative", "CreateRerouteNode", "Create Reroute Node")
+	);
+
+	Graph->Modify();
+	OutputPin->Modify();
+	InputPin->Modify();
+	
+	FGraphNodeCreator<UNarrativeNodeKnot> NodeCreator(*Graph);
+	UNarrativeNodeKnot* RerouteNode = NodeCreator.CreateNode();
+
+	RerouteNode->NodePosX = GraphPosition.X;
+	RerouteNode->NodePosY = GraphPosition.Y;
+
+	NodeCreator.Finalize();
+
+	if (!RerouteNode)
+	{
+		return;
+	}
+
+	UEdGraphPin* RerouteInputPin = RerouteNode->GetInputPin();
+	UEdGraphPin* RerouteOutputPin = RerouteNode->GetOutputPin();
+
+	if (!RerouteInputPin || !RerouteOutputPin)
+	{
+		return;
+	}
+
+	RerouteNode->Modify();
+
+	BreakSinglePinLink(OutputPin, InputPin);
+
+	TryCreateConnection(OutputPin, RerouteInputPin);
+	TryCreateConnection(RerouteOutputPin, InputPin);
+
+	Graph->NotifyGraphChanged();
+
+	if (UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForGraph(Graph))
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+	}
+}
+
+FConnectionDrawingPolicy* UNarrativeGraphSchema::CreateConnectionDrawingPolicy(int32 InBackLayerID, int32 InFrontLayerID, float InZoomFactor, const FSlateRect& InClippingRect, FSlateWindowElementList& InDrawElements, UEdGraph* InGraphObj) const
+{
+	return new FNarrativeConnectionDrawingPolicy(
+		InBackLayerID,
+		InFrontLayerID,
+		InZoomFactor,
+		InClippingRect,
+		InDrawElements,
+		InGraphObj
+	);
+}
+
+UEdGraphPin* UNarrativeGraphSchema::ResolveKnotPinForOtherPin(UEdGraphPin* Pin, const UEdGraphPin* OtherPin) const
+{
+	return const_cast<UEdGraphPin*>(ResolveKnotPinForOtherPinConst(Pin, OtherPin));
+}
+
+const UEdGraphPin* UNarrativeGraphSchema::ResolveKnotPinForOtherPinConst(const UEdGraphPin* Pin, const UEdGraphPin* OtherPin) const
+{
+	if (!Pin || !OtherPin)
+	{
+		return Pin;
+	}
+
+	UNarrativeNodeKnot* KnotNode = Cast<UNarrativeNodeKnot>(Pin->GetOwningNode());
+	if (!KnotNode)
+	{
+		return Pin;
+	}
+
+	if (OtherPin->Direction == EGPD_Input)
+	{
+		return KnotNode->GetOutputPin();
+	}
+
+	if (OtherPin->Direction == EGPD_Output)
+	{
+		return KnotNode->GetInputPin();
+	}
+
+	return Pin;
+}
+
+bool UNarrativeGraphSchema::IsKnotToKnot(const UEdGraphPin* Pin, const UEdGraphPin* OtherPin) const
+{
+	return Pin->GetOwningNode()->IsA<UNarrativeNodeKnot>() && OtherPin->GetOwningNode()->IsA<UNarrativeNodeKnot>();
+}
+
 UEdGraphNode* FNewNodeAction::PerformAction(UEdGraph* ParentGraph, UEdGraphPin* FromPin, const FVector2D Location, bool bSelectNewNode)
 {
-	const FScopedTransaction Transaction(NSLOCTEXT("Narrative", "AddNodes", "Add Narrative Nodes"));
-	UNarrativeGraphNodeBase* ResultNode = nullptr;
-
-	switch (Grouping)
+	if (!ParentGraph || !NodeClass)
 	{
-	case 0: // Dialog Node
+		return nullptr;
+	}
+
+	const FScopedTransaction Transaction(
+		NSLOCTEXT("Narrative", "AddNodes", "Add Narrative Node")
+	);
+
+	UEdGraphPin* PreviousLinkedToPin = nullptr;
+	UNarrativeGraphNodeBase* PreviousLinkedToNode = nullptr;
+	if (FromPin && FromPin->LinkedTo.IsValidIndex(0))
 	{
-		UNarrativeGraphNode* DialogueGraphNode = NewObject<UNarrativeGraphNode>(ParentGraph);
-		DialogueGraphNode->CreateNewGuid();
-		DialogueGraphNode->NodePosX = Location.X;
-		DialogueGraphNode->NodePosY = Location.Y;
-
-		DialogueGraphNode->SetNodeInfo(NewObject<UNarrativeDialogueNodeInfo>(DialogueGraphNode));
-
-		Cast<UNarrativeDialogueNodeInfo>(DialogueGraphNode->GetNodeInfo())->SpeakerId = NodeName.IsNone() ? FName(TEXT("Unknown Speaker")) : NodeName;
-
-		UEdGraphPin* InputPin = DialogueGraphNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
-		FString DefaultOption = TEXT("");
-		DialogueGraphNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, FName(DefaultOption));
-
-		// If the from pin is not null, connect them
-		if (FromPin)
+		PreviousLinkedToPin = FromPin->LinkedTo[0];
+		if (PreviousLinkedToPin)
 		{
-		DialogueNodeInfo->SpeakerName = SpeakerData.GetSpeakerDisplayName();
+			PreviousLinkedToNode = Cast<UNarrativeGraphNodeBase>(PreviousLinkedToPin->GetOwningNode());
 		}
-
-		ParentGraph->Modify();
-		ParentGraph->AddNode(DialogueGraphNode, true, true);
-
-		ResultNode = DialogueGraphNode;
-		break;
 	}
-	case 1: // Player Node
+
+	ParentGraph->Modify();
+
+	UEdGraphNode* ResultNode = NewObject<UEdGraphNode>(
+		ParentGraph,
+		NodeClass,
+		NAME_None,
+		RF_Transactional
+	);
+
+	if (!ResultNode)
 	{
-		UNarrativePlayerGraphNode* PlayerGraphNode = NewObject<UNarrativePlayerGraphNode>(ParentGraph);
-		PlayerGraphNode->CreateNewGuid();
-		PlayerGraphNode->NodePosX = Location.X;
-		PlayerGraphNode->NodePosY = Location.Y;
+		return nullptr;
+	}
 
-		PlayerGraphNode->SetNodeInfo(NewObject<UNarrativePlayerNodeInfo>(PlayerGraphNode));
+	ResultNode->Modify();
 
-		UEdGraphPin* InputPin = PlayerGraphNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
-		FString DefaultOption = TEXT("");
-		PlayerGraphNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, FName(DefaultOption));
-		Cast<UNarrativePlayerNodeInfo>(PlayerGraphNode->GetNodeInfo())->Options.Add(FText::FromString(DefaultOption));
+	ResultNode->CreateNewGuid();
+	ResultNode->NodePosX = Location.X;
+	ResultNode->NodePosY = Location.Y;
 
-		if (FromPin)
+	ResultNode->AllocateDefaultPins();
+
+	if (UNarrativeGraphNodeBase* NarrativeNode = Cast<UNarrativeGraphNodeBase>(ResultNode))
+	{
+		if (UNarrativeDialogueNodeInfo* DialogueNodeInfo = NarrativeNode->GetNodeInfoAs<UNarrativeDialogueNodeInfo>())
 		{
-			PlayerGraphNode->GetSchema()->TryCreateConnection(FromPin, InputPin);
+			DialogueNodeInfo->Modify();
+			DialogueNodeInfo->SpeakerName = SpeakerData.GetSpeakerDisplayName();
 		}
-
-		ParentGraph->Modify();
-		ParentGraph->AddNode(PlayerGraphNode, true, true);
-
-		ResultNode = PlayerGraphNode;
-		break;
 	}
-	case 2:
+
+	ParentGraph->AddNode(ResultNode, true, bSelectNewNode);
+
+	if (FromPin)
 	{
-		UNarrativeCutsceneNode* CutsceneNode = NewObject<UNarrativeCutsceneNode>(ParentGraph);
-		CutsceneNode->CreateNewGuid();
-		CutsceneNode->NodePosX = Location.X;
-		CutsceneNode->NodePosY = Location.Y;
-
-		CutsceneNode->SetNodeInfo(NewObject<UNarrativeCutsceneNodeInfo>(CutsceneNode));
-
-		UEdGraphPin* InputPin = CutsceneNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
-		FString DefaultOption = TEXT("");
-		CutsceneNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, FName(DefaultOption));
-
-		// If the from pin is not null, connect them
-		if (FromPin)
+		if (UEdGraphPin** InputPin = ResultNode->Pins.FindByPredicate([](const UEdGraphPin* Pin)
+			{
+				return Pin->Direction == EGPD_Input;
+			}))
 		{
-			CutsceneNode->GetSchema()->TryCreateConnection(FromPin, InputPin);
+			ResultNode->GetSchema()->TryCreateConnection(FromPin, *InputPin);
 		}
-
-		ParentGraph->Modify();
-		ParentGraph->AddNode(CutsceneNode, true, true);
-
-		ResultNode = CutsceneNode;
-		break;
-	}
 	}
 
-	if (ResultNode)
+	if (PreviousLinkedToPin && PreviousLinkedToNode)
 	{
-		ResultNode->SetFlags(RF_Transactional);
-		ResultNode->Rename(nullptr, ParentGraph, REN_NonTransactional);
-		ResultNode->Modify();
+		if (UEdGraphPin** OutputPin = ResultNode->Pins.FindByPredicate([](const UEdGraphPin* Pin)
+			{
+				return Pin->Direction == EGPD_Output;
+			}))
+		{
+			ResultNode->GetSchema()->TryCreateConnection(*OutputPin, PreviousLinkedToPin);
+		}
+	}
+
+	ParentGraph->NotifyGraphChanged();
+
+	if (UBlueprint* Blueprint = FBlueprintEditorUtils::FindBlueprintForGraph(ParentGraph))
+	{
+		FBlueprintEditorUtils::MarkBlueprintAsModified(Blueprint);
+		Blueprint->MarkPackageDirty();
 	}
 
 	return ResultNode;
+}
+
+FNarrativeConnectionDrawingPolicy::FNarrativeConnectionDrawingPolicy(
+	int32 InBackLayerID,
+	int32 InFrontLayerID,
+	float InZoomFactor,
+	const FSlateRect& InClippingRect,
+	FSlateWindowElementList& InDrawElements,
+	UEdGraph* InGraphObj
+)
+	: FKismetConnectionDrawingPolicy(
+		InBackLayerID,
+		InFrontLayerID,
+		InZoomFactor,
+		InClippingRect,
+		InDrawElements,
+		InGraphObj
+	)
+{
+}
+
+bool FNarrativeConnectionDrawingPolicy::ShouldChangeTangentForRerouteControlPoint(
+	const UNarrativeNodeKnot* Node
+)
+{
+	if (!Node)
+	{
+		return false;
+	}
+
+	if (bool* CachedResult = KnotToReversedDirectionMap.Find(Node))
+	{
+		return *CachedResult;
+	}
+
+	bool bPinReversed = false;
+
+	int32 InputPinIndex = 0;
+	int32 OutputPinIndex = 0;
+
+	if (Node->ShouldDrawNodeAsControlPointOnly(InputPinIndex, OutputPinIndex))
+	{
+		const TArray<UEdGraphPin*>& Pins = Node->GetAllPins();
+
+		if (!Pins.IsValidIndex(InputPinIndex) || !Pins.IsValidIndex(OutputPinIndex))
+		{
+			KnotToReversedDirectionMap.Add(Node, false);
+			return false;
+		}
+
+		FVector2f AverageLeftPin = FVector2f::ZeroVector;
+		FVector2f AverageRightPin = FVector2f::ZeroVector;
+		FVector2f CenterPin = FVector2f::ZeroVector;
+
+		// InputPin / OutputPin 視覺上共用同一個位置，取任一個 center 即可。
+		const bool bCenterValid = FindPinCenter(Pins[OutputPinIndex], CenterPin);
+
+		const bool bLeftValid = GetAverageConnectedPositionForPin(Pins[InputPinIndex], AverageLeftPin);
+		const bool bRightValid = GetAverageConnectedPositionForPin(Pins[OutputPinIndex], AverageRightPin);
+
+		if (bLeftValid && bRightValid)
+		{
+			bPinReversed = AverageRightPin.X < AverageLeftPin.X;
+		}
+		else if (bCenterValid)
+		{
+			if (bLeftValid)
+			{
+				bPinReversed = CenterPin.X < AverageLeftPin.X;
+			}
+			else if (bRightValid)
+			{
+				bPinReversed = AverageRightPin.X < CenterPin.X;
+			}
+		}
+	}
+
+	KnotToReversedDirectionMap.Add(Node, bPinReversed);
+	return bPinReversed;
+}
+
+bool FNarrativeConnectionDrawingPolicy::GetAverageConnectedPositionForPin(
+	UEdGraphPin* InPin,
+	FVector2f& OutPos
+) const
+{
+	if (!InPin)
+	{
+		return false;
+	}
+
+	FVector2f Result = FVector2f::ZeroVector;
+	int32 ResultCount = 0;
+
+	for (UEdGraphPin* LinkedPin : InPin->LinkedTo)
+	{
+		if (!LinkedPin)
+		{
+			continue;
+		}
+
+		FVector2f CenterPoint;
+		if (FindPinCenter(LinkedPin, CenterPoint))
+		{
+			Result += CenterPoint;
+			++ResultCount;
+		}
+	}
+
+	if (ResultCount <= 0)
+	{
+		return false;
+	}
+
+	OutPos = Result / static_cast<float>(ResultCount);
+	return true;
+}
+
+void FNarrativeConnectionDrawingPolicy::DetermineWiringStyle(
+	UEdGraphPin* OutputPin,
+	UEdGraphPin* InputPin,
+	FConnectionParams& Params
+)
+{
+	FKismetConnectionDrawingPolicy::DetermineWiringStyle(OutputPin, InputPin, Params);
+
+	if (!OutputPin || !InputPin)
+	{
+		return;
+	}
+
+	if (OutputPin->Direction == EGPD_Input)
+	{
+		Swap(OutputPin, InputPin);
+	}
+
+	const UNarrativeNodeKnot* OutputNode =
+		Cast<UNarrativeNodeKnot>(OutputPin->GetOwningNode());
+
+	const UNarrativeNodeKnot* InputNode =
+		Cast<UNarrativeNodeKnot>(InputPin->GetOwningNode());
+
+	if (OutputNode && ShouldChangeTangentForRerouteControlPoint(OutputNode))
+	{
+		Params.StartDirection = EGPD_Input;
+	}
+
+	if (InputNode && ShouldChangeTangentForRerouteControlPoint(InputNode))
+	{
+		Params.EndDirection = EGPD_Output;
+	}
+
+	// 你的 Narrative 線條樣式可放這裡
+	Params.WireColor = FLinearColor(0.85f, 0.85f, 0.85f, 1.0f);
+	Params.WireThickness = 2.0f;
 }

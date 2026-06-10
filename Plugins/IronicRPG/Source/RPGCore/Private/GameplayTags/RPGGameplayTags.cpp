@@ -15,9 +15,9 @@ void FRPGGameplayTags::InitializeNativeGameplayTags()
 
 	// Add more tags as needed
 
-	// =================
-	// SECTION TAGS
-	// =================
+	// -----------------
+	//  SECTION TAGS
+	// -----------------
 
 	
 }

@@ -5,7 +5,7 @@
 #include "CoreMinimal.h"
 #include "Assets/RPGPrimaryAsset.h"
 #include "Characters/CharacterDataTypes.h"
-#include "InstancedStruct.h"
+#include "StructUtils/InstancedStruct.h"
 #include "BehaviorTree/BehaviorTree.h"
 #include "CharacterAsset.generated.h"
 
@@ -18,7 +18,7 @@ class RPGCORE_API UCharacterAsset : public URPGPrimaryAsset
 	GENERATED_BODY()
 	DEFINE_ASSET_TYPE(Character, c)
 	
-protected: // General Properties
+protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Capsule")
 	float DefaultCapsuleHalfHeight = 88.f;
 	ASSET_PROP_GETTER(float, DefaultCapsuleHalfHeight)
@@ -27,15 +27,15 @@ protected: // General Properties
 	float DefaultCapsuleRadius = 34.f;
 	ASSET_PROP_GETTER(float, DefaultCapsuleRadius)
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "AI", meta=(AssetBundles = "Character"))
 	TSoftObjectPtr<UBehaviorTree> BehaviorTree = nullptr;
 	ASSET_PROP_GETTER(TSoftObjectPtr<UBehaviorTree>, BehaviorTree)
 
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character", meta=(AssetBundles = "Character"))
 	TSoftObjectPtr<UCurveTable> GrowthTable = nullptr;
 	ASSET_PROP_GETTER(TSoftObjectPtr<UCurveTable>, GrowthTable)
 	
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character")
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character", meta=(AssetBundles = "UI"))
 	TSoftObjectPtr<UTexture2D> Portrait = nullptr;
 	ASSET_PROP_GETTER(TSoftObjectPtr<UTexture2D>, Portrait)
 
@@ -46,6 +46,10 @@ protected: // General Properties
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Profile", meta = (BaseStruct = "/Script/RPGCore.CharacterProfileBase", ExcludeBaseStruct))
 	TArray<FInstancedStruct> Profiles;
 	ASSET_PROP_GETTER(TArray<FInstancedStruct>, Profiles)
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Animation", meta=(AssetBundles = "Character"))
+	TSoftObjectPtr<class UChooserTable> AnimationTable;
+	ASSET_PROP_GETTER(TSoftObjectPtr<class UChooserTable>, AnimationTable)
 
 public:
 	FCharacterSaveData GetAttributesAtLevel(int32 Level) const;

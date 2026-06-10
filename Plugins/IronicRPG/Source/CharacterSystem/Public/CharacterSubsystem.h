@@ -9,15 +9,14 @@
 #include "Controllers/RPGPlayerController.h"
 #include "Characters/CharacterAsset.h"
 #include "SaveGame/Saveable.h"
-#include "Flowable.h"
 #include "Characters/CharacterDataTypes.h"
 #include "DataTypes/RPGId.h"
 #include "CharacterSubsystem.generated.h"
 
 DECLARE_LOG_CATEGORY_EXTERN(LogCharacterSubsystem, Log, All);
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnCharacterSpawned, FRPGId);
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnPartyMembersSpawned, const TArray<FRPGId>&);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnPartyReady);
+DECLARE_MULTICAST_DELEGATE(FOnPartyConstructed);
 
 class APlayableCharacter;
 
@@ -47,16 +46,13 @@ enum class ESpawnPartyMode : uint8
  * Character Subsystem to manage character data and instances.
  */
 UCLASS(Abstract, Blueprintable)
-class CHARACTERSYSTEM_API UCharacterSubsystem : public UGameInstanceSubsystem, public ISaveable, public IFlowable
+class CHARACTERSYSTEM_API UCharacterSubsystem : public UGameInstanceSubsystem, public ISaveable
 {
 	GENERATED_BODY()
 
 protected: // Subsystem Interface
 	void Initialize(FSubsystemCollectionBase& Collection) override;
 	void Deinitialize() override;
-
-	virtual void StartupSubsystem_Implementation() override;
-	virtual void ShutdownSubsystem_Implementation() override {}
 
 // ============
 //  Data Layer
@@ -66,13 +62,17 @@ public:
 	// Map of character data, keyed by character Id, but only stores CHARACTER DATA YOU WANT TO SAVE
 	// And it is not "Authority Data", so we recommend that you only use it for loading and saving
 	// The actual runtime data is owned by the character itself
-	// Or you should call SyncCharacterDataMap() to sync the data with all character assets in the game
+	// Or you should call SavePartyMembersDataToMap() to sync the data with all character assets in the game
 	UPROPERTY(BlueprintReadWrite, Category = "Character")
 	TMap<FRPGId, FCharacterSaveData> CharacterDataMap;
 
-	// Sync the character data map with all character assets in the game
+	// Save a single character's data to CharacterDataMap
 	UFUNCTION(BlueprintCallable)
-	virtual void SyncCharacterDataMap();
+	virtual void SaveCharacterDataToMap(ABaseCharacter* Instance);
+
+	// Save all party members' data to CharacterDataMap
+	UFUNCTION(BlueprintCallable)
+	virtual void SavePartyMembersDataToMap();
 
 	// Modify the character data of multiple characters by applying a gameplay effect
 	// Only modifies the data in CharacterDataMap, does not affect the actual character instances
@@ -88,13 +88,16 @@ public:
 	// Instances of characters currently in the game
 	UPROPERTY(BlueprintReadOnly, Category = "Character")
 	TMap<FGuid, TObjectPtr<ABaseCharacter>> InstanceCharacters;
+
+	UFUNCTION(BlueprintCallable)
+	void AddInstanceCharacter(ABaseCharacter* Character);
 	
 	// Set the availability status of a character
 	UFUNCTION(BlueprintCallable)
-	void SetCharacterAvailability(const FRPGId Id, const ECharacterAvailabilityStatus Status);
+	void SetCharacterAvailability(const FRPGId& Id, const ECharacterAvailabilityStatus Status);
 
 	UFUNCTION(BlueprintCallable)
-	bool IsAvailable(const FRPGId Id) const;
+	bool IsAvailable(const FRPGId& Id) const;
 
 	/**
 	 * Use a RPGId to spawn a character
@@ -104,7 +107,6 @@ public:
 	 * @param Location Location to spawn.
 	 * @param Rotation Rotation to spawn.
 	 * @param bAsync Whether to load the character asset asynchronously. If true, the character will spawn synchronously, but data will be loaded asynchronously.
-	 * @param InGuid The Guid to identify the character instance. If it is invalid, a new Guid will be generated.
 	 */
 	UFUNCTION(BlueprintCallable)
 	ABaseCharacter* SpawnCharacter(
@@ -112,8 +114,7 @@ public:
 		const TSubclassOf<ABaseCharacter> CharacterClass = nullptr,
 		const FVector Location = FVector::ZeroVector,
 		const FRotator Rotation = FRotator::ZeroRotator,
-		const bool bAsync = true,
-		const FGuid InGuid = FGuid()
+		const bool bAsync = true
 	);
 
 	/**
@@ -123,26 +124,35 @@ public:
 	 * @param CharacterClass The character class of the character instance. If it is nullptr, use ABaseCharacter as default.
 	 * @param Location Location to spawn.
 	 * @param Rotation Rotation to spawn.
-	 * @param InGuid The Guid to identify the character instance. If it is invalid, a new Guid will be generated.
 	 */
 	UFUNCTION(BlueprintCallable)
 	ABaseCharacter* SpawnCharacterByAsset(
 		UCharacterAsset* Asset,
 		const TSubclassOf<ABaseCharacter> CharacterClass = nullptr,
 		const FVector Location = FVector::ZeroVector,
-		const FRotator Rotation = FRotator::ZeroRotator,
-		const FGuid InGuid = FGuid()
+		const FRotator Rotation = FRotator::ZeroRotator
 	);
 
 	UFUNCTION(BlueprintCallable)
 	void DespawnCharacter(const FGuid& Guid);
 
-	FOnCharacterSpawned OnCharacterSpawned;
+	// On party ready, broadcast when all party members are spawned and ready, and the player character is possessed
+	UPROPERTY(BlueprintAssignable)
+	FOnPartyReady OnPartyReady;
 
-	FOnPartyMembersSpawned OnPartyMembersSpawned;
+	// On party constructed, for C++ use, broadcast when all party members are spawned
+	FOnPartyConstructed OnPartyConstructed;
 
 private:
-	void OnCharacterToSpawnLoaded(URPGPrimaryAsset* Asset, const FGuid InGuid = FGuid());
+	void OnCharacterToSpawnLoaded(URPGPrimaryAsset* Asset, const FGuid InGuid);
+
+	bool bIsSpawningPartyMembers = false;
+
+	int32 PendingPartyInitCount = 0;
+
+	bool bPartyTeleportDone = false;
+
+	void TryBroadcastPartyReady();
 
 protected:
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Character|Party")
@@ -186,10 +196,11 @@ public: // Party Functions
 
 	UFUNCTION(BlueprintCallable, Category = "Character|Party")
 	void SpawnPartyMembers(const FVector Location, const FRotator Rotation, bool bAsync = true, ESpawnPartyMode SpawnPartyMode = ESpawnPartyMode::KeepControlSameCharacter);
+	void SpawnPartyMembers(const FTransform Transform, bool bAsync = true, ESpawnPartyMode SpawnPartyMode = ESpawnPartyMode::KeepControlSameCharacter);
 
 	UFUNCTION(BlueprintCallable, Category = "Character|Party")
 	void SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FVector Location, const FRotator Rotation, bool bAsync = true, ESpawnPartyMode SpawnPartyMode = ESpawnPartyMode::KeepControlSameCharacter);
-
+	
 	UFUNCTION(BlueprintCallable, Category = "Character|Party")
 	void TeleportPartyMembers(const FVector Location, const FRotator Rotation);
 
@@ -216,6 +227,12 @@ public: // Party Functions
 
 	UFUNCTION(BlueprintCallable, Category = "Character|Party")
 	int32 GetMaxPartyMembers() const { return MaxPartyMembers; }
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	void SwitchToNextCharacter(const float DurationOverridden = -1.0f);
+
+	UFUNCTION(BlueprintCallable, Category = "Character|Party")
+	void SwitchToPreviousCharacter(const float DurationOverridden = -1.0f);
 
 	UFUNCTION(BlueprintCallable, Category = "Character|Party")
 	void SwitchPlayerCharacterByIndex(const int32 Index, const float DurationOverridden = -1.0f);

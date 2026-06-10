@@ -2,10 +2,10 @@
 
 
 #include "Characters/CharacterControlComponent.h"
-#include "Characters/BaseCharacter.h"
 #include "Characters/PlayableCharacter.h"
 #include "Controllers/RPGPlayerController.h"
 #include "Characters/Components/RPGCharacterMovementComponent.h"
+#include "Characters/Components/CharacterAbilitySystemComponent.h"
 
 #include "Components/InputComponent.h"
 #include "EnhancedInputComponent.h"
@@ -69,7 +69,7 @@ void UCharacterControlComponent::UpdateControlledCharacter()
 		return;
 	}
 
-	ControlledCharacter = Cast<ABaseCharacter>(Controller->GetPawn());
+	ControlledCharacter = Cast<APlayableCharacter>(Controller->GetPawn());
 	if (ControlledCharacter)
 	{
 		CharacterMovement = Cast<URPGCharacterMovementComponent>(ControlledCharacter->GetCharacterMovement());
@@ -90,7 +90,7 @@ void UCharacterControlComponent::DisableAllInputs()
 	DisableMoveContext();
 }
 
-void UCharacterControlComponent::Look(const FInputActionValue& Value)
+void UCharacterControlComponent::Look_Implementation(const FInputActionValue& Value)
 {
 	if (!ControlledCharacter)
 	{
@@ -103,18 +103,18 @@ void UCharacterControlComponent::Look(const FInputActionValue& Value)
 	ControlledCharacter->AddControllerPitchInput(-LookInput.Y);
 }
 
-void UCharacterControlComponent::Zoom(const FInputActionValue& Value)
+void UCharacterControlComponent::Zoom_Implementation(const FInputActionValue& Value)
 {
 	if (ControlledCharacter)
 	{
-		if (auto* SpringArm = ControlledCharacter->FindComponentByClass<URPGSpringArmComponent>())
+		if (URPGSpringArmComponent* SpringArm = ControlledCharacter->FindComponentByClass<URPGSpringArmComponent>())
 		{
 			SpringArm->CameraZoom(Value.Get<float>());
 		}
 	}
 }
 
-void UCharacterControlComponent::Move(const FInputActionValue& Value)
+void UCharacterControlComponent::Move_Implementation(const FInputActionValue& Value)
 {
 	if (!Controller || !ControlledCharacter || !CharacterMovement)
 	{
@@ -133,7 +133,7 @@ void UCharacterControlComponent::Move(const FInputActionValue& Value)
 	CharacterMovement->CharacterMove(MoveDirection, MovementVector.Length());
 }
 
-void UCharacterControlComponent::EndMove(const FInputActionValue& Value)
+void UCharacterControlComponent::EndMove_Implementation(const FInputActionValue& Value)
 {
 	if (!CharacterMovement)
 	{
@@ -144,17 +144,17 @@ void UCharacterControlComponent::EndMove(const FInputActionValue& Value)
 	CharacterMovement->ResetToWalkingSpeed();
 }
 
-void UCharacterControlComponent::Jump()
+void UCharacterControlComponent::Jump_Implementation()
 {
-	if (!CharacterMovement)
+	if (!ControlledCharacter || !ControlledCharacter->AbilitySystemComponent)
 	{
 		return;
 	}
 
-	CharacterMovement->CharacterJump();
+	ControlledCharacter->AbilitySystemComponent->TryActivateAbilityById(ControlledCharacter->GetJumpAbilityId());
 }
 
-void UCharacterControlComponent::Sprint(const FInputActionValue& Value)
+void UCharacterControlComponent::Sprint_Implementation(const FInputActionValue& Value)
 {
 	if (!CharacterMovement)
 	{

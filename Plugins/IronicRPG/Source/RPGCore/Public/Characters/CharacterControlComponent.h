@@ -6,7 +6,7 @@
 #include "Controllers/BaseControlComponent.h"
 #include "CharacterControlComponent.generated.h"
 
-class ABaseCharacter;
+class APlayableCharacter;
 class URPGCharacterMovementComponent;
 
 class UInputMappingContext;
@@ -27,9 +27,9 @@ public:
 	virtual void BeginPlay() override;
 	virtual void UpdateControlledCharacter();
 		
-public:
+protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Character")
-	ABaseCharacter* ControlledCharacter = nullptr;
+	APlayableCharacter* ControlledCharacter = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Character")
 	URPGCharacterMovementComponent* CharacterMovement = nullptr;
@@ -40,28 +40,34 @@ public:
 
 protected:
 	// Look input handler
-	UFUNCTION(BlueprintCallable, Category = "Character Control")
-	virtual void Look(const FInputActionValue& Value);
+	UFUNCTION(BlueprintNativeEvent, Category = "Character Control")
+	void Look(const FInputActionValue& Value);
+	virtual void Look_Implementation(const FInputActionValue& Value);
 
 	// Zoom input handler
-	UFUNCTION(BlueprintCallable, Category = "Character Control")
-	virtual void Zoom(const FInputActionValue& Value);
+	UFUNCTION(BlueprintNativeEvent, Category = "Character Control")
+	void Zoom(const FInputActionValue& Value);
+	virtual void Zoom_Implementation(const FInputActionValue& Value);
 
 	// Move input handler
-	UFUNCTION(BlueprintCallable, Category = "Character Control")
-	virtual void Move(const FInputActionValue& Value);
+	UFUNCTION(BlueprintNativeEvent, Category = "Character Control")
+	void Move(const FInputActionValue& Value);
+	virtual void Move_Implementation(const FInputActionValue& Value);
 	
 	// EndMove input handler
-	UFUNCTION(BlueprintCallable, Category = "Character Control")
-	virtual void EndMove(const FInputActionValue& Value);
+	UFUNCTION(BlueprintNativeEvent, Category = "Character Control")
+	void EndMove(const FInputActionValue& Value);
+	virtual void EndMove_Implementation(const FInputActionValue& Value);
 
 	// Jump input handler
-	UFUNCTION(BlueprintCallable, Category = "Character Control")
-	virtual void Jump();
+	UFUNCTION(BlueprintNativeEvent, Category = "Character Control")
+	void Jump();
+	virtual void Jump_Implementation();
 
 	// Sprint input handler
-	UFUNCTION(BlueprintCallable, Category = "Character Control")
-	virtual void Sprint(const FInputActionValue& Value);
+	UFUNCTION(BlueprintNativeEvent, Category = "Character Control")
+	void Sprint(const FInputActionValue& Value);
+	virtual void Sprint_Implementation(const FInputActionValue& Value);
 
 protected: // Ehanced Input
 	// Input mapping context

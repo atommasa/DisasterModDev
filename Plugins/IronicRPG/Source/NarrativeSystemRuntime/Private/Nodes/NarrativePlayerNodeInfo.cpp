@@ -1,6 +1,6 @@
 
 
 
-#include "Nodes/NarrativePlayerNodeInfo.h"
+#include "Nodes/NarrativePlayerOptionsNodeInfo.h"
 
 

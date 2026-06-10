@@ -26,11 +26,6 @@
 			"LoadingPhase": "Default"
 		},
 		{
-			"Name": "GameFramework",
-			"Type": "Runtime",
-			"LoadingPhase": "Default"
-		},
-		{
 			"Name": "UIFramework",
 			"Type": "Runtime",
 			"LoadingPhase": "Default"
@@ -108,6 +103,10 @@
 		},
 		{
 			"Name": "EnhancedInput",
+			"Enabled": true
+		},
+		{
+			"Name": "Chooser",
 			"Enabled": true
 		}
 	]

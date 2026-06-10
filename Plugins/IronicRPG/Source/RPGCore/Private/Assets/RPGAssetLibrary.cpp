@@ -8,9 +8,8 @@ DEFINE_LOG_CATEGORY(LogRPGAssetLibrary);
 
 TSharedPtr<FStreamableHandle> URPGAssetLibrary::GetAssetByRPGIdAsync(const FRPGId& Id, const TArray<FName>& Bundles, TFunction<void(URPGPrimaryAsset*)> OnResult)
 {
-	// Check if the asset is already loaded
 	UObject* ExistingObject = GET_ASSET_BY_RPGID(Id);
-	if (ExistingObject)
+	if (ExistingObject && Bundles.Num() == 0)
 	{
 		OnResult(Cast<URPGPrimaryAsset>(ExistingObject));
 		return nullptr;
@@ -32,15 +31,15 @@ TSharedPtr<FStreamableHandle> URPGAssetLibrary::GetAssetByRPGIdAsync(const FRPGI
 
 	if (!Handle.IsValid())
 	{
-		// Handle is invalid, asset could not be loaded
-		OnResult(nullptr);
+		UObject* Obj = GET_ASSET_BY_RPGID(Id);
+		OnResult(Cast<URPGPrimaryAsset>(Obj));
 		return nullptr;
 	}
 
 	return Handle;
 }
 
-TSharedPtr<FStreamableHandle> URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(const TArray<FRPGId>& Ids, TFunction<void(TArray<URPGPrimaryAsset*>)> OnResult)
+TSharedPtr<FStreamableHandle> URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(const TArray<FRPGId>& Ids, const TArray<FName>& Bundles, TFunction<void(TArray<URPGPrimaryAsset*>)> OnResult)
 {
 	TArray<URPGPrimaryAsset*> LoadedAssets;
 	TArray<FPrimaryAssetId> PrimaryAssetIds;
@@ -48,7 +47,7 @@ TSharedPtr<FStreamableHandle> URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(const
 	{
 		// Check if the asset is already loaded
 		UObject* ExistingObject = GET_ASSET_BY_RPGID(Id);
-		if (ExistingObject)
+		if (ExistingObject && Bundles.Num() == 0)
 		{
 			LoadedAssets.Add(Cast<URPGPrimaryAsset>(ExistingObject));
 			continue;
@@ -68,13 +67,13 @@ TSharedPtr<FStreamableHandle> URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(const
 	// Asset is not loaded, proceed with async loading
 	TSharedPtr<FStreamableHandle> Handle = UAssetManager::Get().LoadPrimaryAssets(
 		PrimaryAssetIds,
-		{},
+		Bundles,
 		FStreamableDelegate::CreateLambda([LoadedAssets, PrimaryAssetIds, OnResult]()
 			{
 				TArray<URPGPrimaryAsset*> OutAssets = LoadedAssets;
-				for (const FPrimaryAssetId& PrimaryAssetId : PrimaryAssetIds)
+				for (const FPrimaryAssetId& Pid : PrimaryAssetIds)
 				{
-					UObject* LoadedObject = UAssetManager::Get().GetPrimaryAssetObject(PrimaryAssetId);
+					UObject* LoadedObject = UAssetManager::Get().GetPrimaryAssetObject(Pid);
 					URPGPrimaryAsset* Asset = Cast<URPGPrimaryAsset>(LoadedObject);
 					if (Asset)
 					{
@@ -82,18 +81,30 @@ TSharedPtr<FStreamableHandle> URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(const
 					}
 					else
 					{
-						UE_LOG(LogRPGAssetLibrary, Warning, TEXT("Failed to load asset with ID: %s"), *PrimaryAssetId.ToString());
+						UE_LOG(LogRPGAssetLibrary, Warning, TEXT("Failed to load asset with ID: %s"), *Pid.ToString());
 					}
 				}
-
+				
 				OnResult(OutAssets);
 			})
 	);
 
 	if (!Handle.IsValid())
 	{
-		// Handle is invalid, asset could not be loaded
-		OnResult(LoadedAssets);
+		TArray<URPGPrimaryAsset*> Results;
+		for (const FRPGId& Id : Ids)
+		{
+			if (UObject* Obj = GET_ASSET_BY_RPGID(Id))
+			{
+				if (URPGPrimaryAsset* Asset = Cast<URPGPrimaryAsset>(Obj))
+				{
+					Results.Add(Asset);
+				}
+			}
+		}
+		
+		OnResult(Results);
+		return nullptr;
 	}
 
 	return Handle;
@@ -110,7 +121,10 @@ URPGPrimaryAsset* URPGAssetLibrary::GetAssetByRPGId(const FRPGId& Id)
 	const FPrimaryAssetId PrimaryAssetId(FPrimaryAssetType(FName(Id.GetIdTypeString())), Id.Id);
 
 	// Synchronously load the asset
-	UAssetManager::Get().LoadPrimaryAsset(PrimaryAssetId)->WaitUntilComplete();
+	if (TSharedPtr<FStreamableHandle> Handle = UAssetManager::Get().LoadPrimaryAsset(PrimaryAssetId))
+	{
+		Handle->WaitUntilComplete();
+	}
 
 	return Cast<URPGPrimaryAsset>(UAssetManager::Get().GetPrimaryAssetObject(PrimaryAssetId));
 }

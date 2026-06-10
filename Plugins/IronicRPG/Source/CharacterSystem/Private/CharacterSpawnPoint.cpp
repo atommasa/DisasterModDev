@@ -162,8 +162,7 @@ void ACharacterSpawnPoint::Awaken()
 			SpawnClass,
 			SpawnLocation,
 			SpawnRotation,
-			false,
-			SpawnGuid
+			false
 		);
 
 		if (SpawnedCharacter.IsValid())

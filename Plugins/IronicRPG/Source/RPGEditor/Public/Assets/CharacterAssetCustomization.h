@@ -67,8 +67,6 @@ protected:
 		return ViewportClient.ToSharedRef();
 	}
 
-	virtual TSharedPtr<SWidget> MakeViewportToolbar() override { return SNullWidget::NullWidget; }
-
 private:
 	TSharedPtr<FEditorViewportClient> ViewportClient;
 	TSharedPtr<class FAdvancedPreviewScene> PreviewScene;
@@ -109,7 +107,8 @@ protected:
 					{"Character", 2},
 					{"Profile", 3},
 					{"Capsule", 4},
-					{"AI", 5},
+					{"Animation", 5},
+					{"AI", 6},
 				};
 				
 				for (auto& Pair : Categories)

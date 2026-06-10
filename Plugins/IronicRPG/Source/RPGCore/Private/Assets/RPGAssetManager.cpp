@@ -5,6 +5,7 @@
 #include "Assets/RPGPrimaryAsset.h"
 
 #include "GameplayTags/RPGGameplayTags.h"
+#include "Engine/AssetManagerSettings.h"
 
 DEFINE_LOG_CATEGORY(LogRPGAssetManager);
 
@@ -19,12 +20,19 @@ void URPGAssetManager::StartInitialLoading()
 
 	// This is where you would typically start loading your initial assets.
 	UE_LOG(LogRPGAssetManager, Warning, TEXT("RPGAssetManager: Starting initial loading..."));
+
+	const UAssetManagerSettings* S = GetDefault<UAssetManagerSettings>();
+	UE_LOG(LogTemp, Warning, TEXT("PrimaryAssetTypesToScan count = %d"), S->PrimaryAssetTypesToScan.Num());
+	for (const auto& T : S->PrimaryAssetTypesToScan)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("Type=%s BaseClass=%s"), *T.PrimaryAssetType.ToString(), *T.AssetBaseClassLoaded->GetName());
+	}
 }
 
 void URPGAssetManager::ScanRPGAssetTypes()
 {
 	TArray<UClass*> Derived;
-	GetDerivedClasses(URPGPrimaryAsset::StaticClass(), Derived, /*bRecursive=*/false);
+	GetDerivedClasses(URPGPrimaryAsset::StaticClass(), Derived, /*bRecursive=*/true);
 
 	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 	
@@ -70,19 +78,16 @@ void URPGAssetManager::ScanRPGAssetTypes()
 				UE_LOG(LogRPGAssetManager, Warning, TEXT("Successfully add type %s with class %s!"), *Type.ToString(), *Class->GetName());
 			}
 #endif // WITH_EDITOR
-			ScanPathForPrimaryAssets(
+			int32 Num = ScanPathForPrimaryAssets(
 				CDO->GetAssetType(),
 				*VirtualPath,
 				Class,
 				false,
 				false,
-				false
+				true
 			);
 
-			SetPrimaryAssetRules(
-				CDO->GetPrimaryAssetId(),
-				FPrimaryAssetRules()
-			);
+			UE_LOG(LogTemp, Warning, TEXT("%s: %d"), *CDO->GetAssetType().ToString(), Num);
 		}
 	}
 #if WITH_EDITOR

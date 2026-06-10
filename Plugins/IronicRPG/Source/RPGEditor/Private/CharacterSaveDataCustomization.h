@@ -5,6 +5,10 @@
 #include "CoreMinimal.h"
 #include "IPropertyTypeCustomization.h"
 
+#include "DataTypes/RPGId.h"
+
+#include "Characters/Attributes/RPGAttributeSet.h"
+
 /**
  * 
  */
@@ -17,11 +21,20 @@ public:
 	virtual void CustomizeChildren(TSharedRef<IPropertyHandle> PropertyHandle, IDetailChildrenBuilder& ChildBuilder, IPropertyTypeCustomizationUtils& CustomizationUtils) override;
 
 private:
-	void CostomizeAttributeSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle);
+	void UpdateLearnedOptions();
+	void CostomizeEquippedAbilitiesSection(IDetailChildrenBuilder& ChildBuilder);
 
-	TSharedPtr<SWidget> GenerateMaxValueButton(FStructProperty* StructProp);
-	TSharedPtr<SWidget> GenerateAttributeEntryBox(FStructProperty* StructProp);
+	TSharedPtr<IPropertyHandle> LearnedAbilitiesHandle = nullptr;
+	TSharedPtr<IPropertyHandle> EquippedAbilitiesHandle = nullptr;
+
+	TArray<TSharedPtr<FRPGId>> LearnedOptions;
+	TArray<TSharedPtr<FRPGId>> EquippedAbilities;
 
 private:
+	void CostomizeAttributesSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle);
+
+	TSharedPtr<SWidget> GenerateMaxValueButton(const FGameplayAttribute& Attribute);
+	TSharedPtr<SWidget> GenerateAttributeEntryBox(const FGameplayAttribute& Attribute);
+
 	TSharedPtr<IPropertyHandle> Handler = nullptr;
 };

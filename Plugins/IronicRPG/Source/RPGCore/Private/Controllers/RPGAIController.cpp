@@ -6,7 +6,6 @@
 
 #include "BehaviorTree/BlackboardComponent.h"
 #include "BehaviorTree/BehaviorTree.h"
-#include "BehaviorTree/BehaviorTreeTypes.h"
 
 #include "Perception/AIPerceptionComponent.h"
 #include "Perception/AIPerceptionTypes.h"
@@ -59,7 +58,7 @@ void ARPGAIController::ConfigurePerceptionSystem()
 
 	SetPerceptionComponent(*CreateDefaultSubobject<UAIPerceptionComponent>(TEXT("PerceptionComp")));
 
-	// Default Configure Sight
+	// Unsaveable Configure Sight
     SightConfig->SightRadius = 1500.0f;
 	SightConfig->LoseSightRadius = 1800.0f;
 	SightConfig->AutoSuccessRangeFromLastSeenLocation = 900.0f;
@@ -73,7 +72,7 @@ void ARPGAIController::ConfigurePerceptionSystem()
 	GetPerceptionComponent()->SetDominantSense(*SightConfig->GetSenseImplementation());
 	GetPerceptionComponent()->ConfigureSense(*SightConfig);
 
-	// Default Configure Hearing
+	// Unsaveable Configure Hearing
     HearingConfig->HearingRange = 1000.0f;
 	HearingConfig->SetMaxAge(5.0f);
 	HearingConfig->DetectionByAffiliation.bDetectEnemies = true;

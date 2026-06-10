@@ -15,7 +15,6 @@
 #include "Characters/BaseCharacter.h"
 
 #include "GameZoneSubsystem.h"
-#include "Levels/RPGPlayerStart.h"
 
 #include "UISubsystem.h"
 
@@ -41,6 +40,9 @@ public:
 	// Start the game from the menu
 	UFUNCTION(BlueprintCallable, Category = "Game")
 	virtual void StartGameSession(const FString& SlotName = TEXT(""));
+
+	UFUNCTION(BlueprintCallable, Category = "Game")
+	virtual void TeleportTo(const FGameZoneContext& NewGameZoneContext);
 
 	UFUNCTION(BlueprintCallable, Category = "Game")
 	virtual void AwakenSpawnablePoints();
@@ -80,11 +82,15 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category = "LoadingScreen")
 	ULoadingScreenSubsystem* LoadingScreenSubsystem;
 
-	UFUNCTION()
-	void OnLoadingScreenStopped();
+	UFUNCTION(BlueprintNativeEvent, Category = "Loading")
+	void OnStoppedLoading();
+	virtual void OnStoppedLoading_Implementation();
 
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Character")
 	UCharacterSubsystem* CharacterSubsystem;
+
+	UFUNCTION()
+	void OnPartyReady();
 
 };
