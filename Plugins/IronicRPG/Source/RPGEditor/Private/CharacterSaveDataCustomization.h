@@ -22,16 +22,13 @@ public:
 
 private:
 	void UpdateLearnedOptions();
-	void CostomizeEquippedAbilitiesSection(IDetailChildrenBuilder& ChildBuilder);
 
 	TSharedPtr<IPropertyHandle> LearnedAbilitiesHandle = nullptr;
-	TSharedPtr<IPropertyHandle> EquippedAbilitiesHandle = nullptr;
 
 	TArray<TSharedPtr<FRPGId>> LearnedOptions;
-	TArray<TSharedPtr<FRPGId>> EquippedAbilities;
 
 private:
-	void CostomizeAttributesSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle);
+	void CostomizeEntryIdSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle);
 
 	TSharedPtr<SWidget> GenerateMaxValueButton(const FGameplayAttribute& Attribute);
 	TSharedPtr<SWidget> GenerateAttributeEntryBox(const FGameplayAttribute& Attribute);

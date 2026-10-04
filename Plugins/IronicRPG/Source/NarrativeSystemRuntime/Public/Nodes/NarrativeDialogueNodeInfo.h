@@ -4,8 +4,10 @@
 
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
+#include "Nodes/DialogueVariableParsable.h"
 #include "Kismet/GameplayStatics.h"
 #include "NarrativeNodeInfo.h"
+#include "Narrative/DialogueDataTypes.h"
 #include "NarrativeDialogueNodeInfo.generated.h"
 
 UCLASS()
@@ -28,22 +30,22 @@ public:
  * 
  */
 UCLASS(BlueprintType)
-class NARRATIVESYSTEMRUNTIME_API UNarrativeDialogueNodeInfo : public UNarrativeNodeInfo
+class NARRATIVESYSTEMRUNTIME_API UNarrativeDialogueNodeInfo : public UNarrativeNodeInfo, public IDialogueVariableParsable
 {
 	GENERATED_BODY()
 
 public:
-	UPROPERTY(VisibleAnywhere, BlueprintReadWrite, Category = "Details")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
 	FText SpeakerName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Line", meta=(MultiLine = "true"))
-	FText Dialogue;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FText OverriddenName;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Line")
-	TSoftObjectPtr<USoundBase> DialogueSound;
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	FDialogueLine DialogueLine;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Dialogue Line")
-	TSoftObjectPtr<UAnimMontage> DialogueMontage;
+public: // IDialogueVariableParsable interface
+	virtual void GetDialogueLinesForVariableParsing(TArray<FDialogueLine>& OutDialogueLines) const override { OutDialogueLines.Add(DialogueLine); }
 
 #if WITH_EDITOR
 public:
@@ -58,7 +60,7 @@ public:
 				TWeakObjectPtr<ANarrativeAudioHelper> Helper = World->SpawnActor<ANarrativeAudioHelper>();
 				if (Helper.IsValid())
 				{
-					Helper->Play2DSound(DialogueSound.Get());
+					Helper->Play2DSound(DialogueLine.DialogueSound.Get());
 					Helper->SetLifeSpan(3.0f);
 				}
 

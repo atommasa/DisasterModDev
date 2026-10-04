@@ -23,6 +23,16 @@
 		{
 			"Name": "RPGCore",
 			"Type": "Runtime",
+			"LoadingPhase": "PreDefault"
+		},
+		{
+			"Name": "InteractionSystem",
+			"Type": "Runtime",
+			"LoadingPhase": "PreDefault"
+		},
+		{
+			"Name": "RPGFlow",
+			"Type": "Runtime",
 			"LoadingPhase": "Default"
 		},
 		{
@@ -33,32 +43,32 @@
 		{
 			"Name": "SaveSystem",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "LoadingScreen",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "CharacterSystem",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "GameZoneSystem",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "AbilitySystem",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "CombatSystem",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "RPGGameplay",
@@ -68,15 +78,20 @@
 		{
 			"Name": "RPGAI",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "NarrativeSystemRuntime",
 			"Type": "Runtime",
-			"LoadingPhase": "Default"
+			"LoadingPhase": "PreDefault"
 		},
 		{
 			"Name": "RPGEditor",
+			"Type": "Editor",
+			"LoadingPhase": "Default"
+		},
+		{
+			"Name": "RPGGraphEditor",
 			"Type": "Editor",
 			"LoadingPhase": "Default"
 		},
@@ -107,6 +122,10 @@
 		},
 		{
 			"Name": "Chooser",
+			"Enabled": true
+		},
+		{
+			"Name": "DataValidation",
 			"Enabled": true
 		}
 	]

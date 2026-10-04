@@ -2,10 +2,14 @@
 
 
 #include "SaveGameSubsystem.h"
-#include "Kismet/GameplayStatics.h"
-#include "SaveGame/RPGSaveGameMetadata.h"
 
-#include "RPGSettings.h"
+#include "Assets/RPGReleaseManifest.h"
+#include "Kismet/GameplayStatics.h"
+#include "SaveGame/RPGSaveGameMigration.h"
+#include "SaveGame/RPGSaveGameMetadata.h"
+#include "SaveGame/RPGSaveGameVersion.h"
+
+#include "Settings/SaveSystemSettings.h"
 
 DEFINE_LOG_CATEGORY(LogSaveSystem);
 
@@ -18,8 +22,49 @@ void USaveGameSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 
 void USaveGameSubsystem::Deinitialize()
 {
-    Super::Deinitialize();
+	ClearLoadTracking();
+	Super::Deinitialize();
+}
 
+void USaveGameSubsystem::ClearLoadTracking()
+{
+	for (const TPair<ISaveable*, FDelegateHandle>& Pair : LoadCompleteHandles)
+	{
+		if (Pair.Key)
+		{
+			Pair.Key->OnLoadComplete().Remove(Pair.Value);
+		}
+	}
+
+	LoadCompleteHandles.Empty();
+	PendingSubsystems.Empty();
+}
+
+void USaveGameSubsystem::HandleSubsystemLoadCompleted(ISaveable* Provider, uint32 LoadRequestId)
+{
+	if (LoadRequestId != ActiveLoadRequestId)
+	{
+		UE_LOG(LogSaveSystem, Verbose, TEXT("Ignoring stale load completion from %s. Request=%u Active=%u"),
+			*GetNameSafe(Provider ? Provider->_getUObject() : nullptr), LoadRequestId, ActiveLoadRequestId);
+		return;
+	}
+
+	if (!Provider || !PendingSubsystems.Remove(Provider))
+	{
+		return;
+	}
+
+	if (FDelegateHandle* Handle = LoadCompleteHandles.Find(Provider))
+	{
+		Provider->OnLoadComplete().Remove(*Handle);
+		LoadCompleteHandles.Remove(Provider);
+	}
+
+	UE_LOG(LogSaveSystem, Log, TEXT("Subsystem %s has completed loading."), *Provider->_getUObject()->GetName());
+	if (PendingSubsystems.IsEmpty())
+	{
+		OnSaveGameLoadCompleted.Broadcast();
+	}
 }
 
 void USaveGameSubsystem::SaveGame(const FString& SlotName, bool bAsync)
@@ -42,6 +87,15 @@ void USaveGameSubsystem::SaveGame(const FString& SlotName, bool bAsync)
 		UE_LOG(LogSaveSystem, Error, TEXT("Failed to create save game instance!"));
 		return;
 	}
+	FRPGReleaseMigrationCatalog ReleaseCatalog;
+	const FRPGReleaseMigrationCatalogResult CatalogResult = FRPGReleaseMigrationCatalogReader::ReadCurrent(ReleaseCatalog);
+	if (!CatalogResult.IsSuccess())
+	{
+		UE_LOG(LogSaveSystem, Error, TEXT("Save refused because the RPG release migration catalog is invalid: %s"),
+			*CatalogResult.Diagnostic);
+		return;
+	}
+	SaveGameInstance->SaveDataVersion = ReleaseCatalog.CurrentVersion;
 
 	UGameInstance* GameInstance = GetGameInstance();
 
@@ -114,6 +168,11 @@ void USaveGameSubsystem::SaveGameByIndex(int32 SlotIndex, bool bAsync)
 	SaveGame(GetValidSlotName(SlotIndex), bAsync);
 }
 
+void USaveGameSubsystem::LoadGameByIndex(int32 SlotIndex, bool bAsync)
+{
+	LoadGame(GetValidSlotName(SlotIndex), bAsync);
+}
+
 void USaveGameSubsystem::DeleteSave(const FString& SlotName)
 {
 	if (SlotName.IsEmpty())
@@ -150,7 +209,13 @@ bool USaveGameSubsystem::DoesSaveExist(const FString& SlotName) const
 
 bool USaveGameSubsystem::IsSlotNameValid(const FString& SlotName) const
 {
-	const FString& Prefix = URPGSettings::GetRPGSettings()->SaveSlotPrefix;
+	const USaveSystemSettings* Settings = GetDefault<USaveSystemSettings>();
+	if (!Settings)
+	{
+		return false;
+	}
+
+	const FString& Prefix = Settings->SaveSlotPrefix;
 	if (SlotName.IsEmpty())
 	{
 		return false;
@@ -161,7 +226,7 @@ bool USaveGameSubsystem::IsSlotNameValid(const FString& SlotName) const
 		return false;
 	}
 
-	const int32 MaxSaveSlots = URPGSettings::GetRPGSettings()->MaxSaveSlots;
+	const int32 MaxSaveSlots = Settings->MaxSaveSlots;
 	if (FCString::Atoi(*SlotName.RightChop(Prefix.Len())) > MaxSaveSlots)
 	{
 		return false;
@@ -172,16 +237,22 @@ bool USaveGameSubsystem::IsSlotNameValid(const FString& SlotName) const
 
 FString USaveGameSubsystem::GetValidSlotName(int32 SlotIndex) const
 {
+	const USaveSystemSettings* Settings = GetDefault<USaveSystemSettings>();
+	if (!Settings)
+	{
+		return FString();
+	}
+
 	FString SlotName;
-	const FString& Prefix = URPGSettings::GetRPGSettings()->SaveSlotPrefix;
+	const FString& Prefix = Settings->SaveSlotPrefix;
 	if (SlotIndex == 0)
 	{
 		// Auto-save slot
-		SlotName = Prefix + URPGSettings::GetRPGSettings()->AutoSaveSlotName;
+		SlotName = Prefix + Settings->AutoSaveSlotName;
 		return SlotName;
 	}
 
-	const int32 MaxSaveSlots = URPGSettings::GetRPGSettings()->MaxSaveSlots;
+	const int32 MaxSaveSlots = Settings->MaxSaveSlots;
 	if (SlotIndex < 1 || SlotIndex > MaxSaveSlots)
 	{
 		UE_LOG(LogSaveSystem, Warning, TEXT("GetValidSlotName called with an invalid SlotIndex: %d"), SlotIndex);
@@ -234,18 +305,41 @@ FString USaveGameSubsystem::GetLastestSaveSlotName() const
 
 TArray<FInstancedStruct> USaveGameSubsystem::GetSaveSlotsMetaData() const
 {
+	const USaveSystemSettings* Settings = GetDefault<USaveSystemSettings>();
+	if (!Settings)
+	{
+		return {};
+	}
+
 	TArray<FInstancedStruct> MetaData;
-	const FString& Prefix = URPGSettings::GetRPGSettings()->SaveSlotPrefix;
-	const int32 MaxSaveSlots = URPGSettings::GetRPGSettings()->MaxSaveSlots;
+	const FString& Prefix = Settings->SaveSlotPrefix;
+	const int32 MaxSaveSlots = Settings->MaxSaveSlots;
 	const int32 NumLen = FString::FromInt(MaxSaveSlots).Len();
 
 	for (int32 SlotIndex = 1; SlotIndex <= MaxSaveSlots; SlotIndex++)
 	{
-		const FString PaddedIndex = FString::Printf(TEXT("%0*d"), NumLen, SlotIndex);
-		const FString SlotName = FString::Printf(TEXT("%s%s"), *Prefix, *PaddedIndex);
+		const FString& PaddedIndex = FString::Printf(TEXT("%0*d"), NumLen, SlotIndex);
+		const FString& SlotName = FString::Printf(TEXT("%s%s"), *Prefix, *PaddedIndex);
 		
 		MetaData.Add(MetaDataSaveGame->MetaData.FindRef(SlotName));
 	}
+
+	return MetaData;
+}
+
+FInstancedStruct USaveGameSubsystem::GetAutoSaveSlotMetaData() const
+{
+	const USaveSystemSettings* Settings = GetDefault<USaveSystemSettings>();
+	if (!Settings)
+	{
+		return {};
+	}
+
+	FInstancedStruct MetaData;
+	const FString& Prefix = Settings->SaveSlotPrefix;
+	const FString& SlotName = FString::Printf(TEXT("%s%s"), *Prefix, *Settings->SaveSlotPrefix);
+
+	MetaData = MetaDataSaveGame->MetaData.FindRef(SlotName);
 
 	return MetaData;
 }
@@ -267,56 +361,78 @@ void USaveGameSubsystem::OnGameSaved(const FString& SlotName, const int32 UserIn
 void USaveGameSubsystem::OnGameLoaded(const FString& SlotName, const int32 UserIndex, USaveGame* SaveGame)
 {
 	URPGSaveGame* SaveGameInstance = Cast<URPGSaveGame>(SaveGame);
-
+	if (SaveGameInstance)
+	{
+		const FRPGSaveGameMigrationResult MigrationResult = FRPGSaveGameMigrator::MigrateToCurrent(*SaveGameInstance);
+		if (!MigrationResult.IsSuccess())
+		{
+			ClearLoadTracking();
+			++ActiveLoadRequestId;
+			UE_LOG(LogSaveSystem, Error, TEXT("Save slot '%s' was rejected before provider dispatch: %s"), *SlotName,
+				*MigrationResult.Diagnostic);
+			OnSaveGameLoadFailed.Broadcast(MigrationResult.Diagnostic);
+			return;
+		}
+	}
 	UGameInstance* GameInstance = GetGameInstance();
 
-	// Iterate through all GameInstanceSubsystems and find those that implement the ISaveable interface
+	// Cancel the bookkeeping for the previous request before registering the new one.
+	// Async provider work cannot always be cancelled, so callbacks also verify this id.
+	ClearLoadTracking();
+	const uint32 ThisLoadRequestId = ++ActiveLoadRequestId;
+
 	for (TObjectIterator<UGameInstanceSubsystem> It; It; ++It)
 	{
-		if (It->GetGameInstance() != GameInstance)
+		if (It->GetGameInstance() != GameInstance || !It->GetClass()->ImplementsInterface(USaveable::StaticClass()))
 		{
 			continue;
 		}
 
-		if (It->GetClass()->ImplementsInterface(USaveable::StaticClass()))
+		ISaveable* Provider = Cast<ISaveable>(*It);
+		if (!Provider)
 		{
-			ISaveable* Provider = Cast<ISaveable>(*It);
-			if (!Provider)
-			{
-				continue;
-			}
-
-			PendingSubsystems.Add(Provider);
-
-			Provider->OnLoadComplete().RemoveAll(Provider);
-			Provider->OnLoadComplete().AddLambda([this, Provider]()
-				{
-					UE_LOG(LogSaveSystem, Warning, TEXT("Subsystem %s has completed loading."), *Provider->_getUObject()->GetName());
-
-					PendingSubsystems.Remove(Provider);
-					if (PendingSubsystems.IsEmpty())
-					{
-						OnSaveGameLoadCompleted.Broadcast();
-					}
-				});
+			continue;
 		}
+
+		PendingSubsystems.Add(Provider);
+
+		TWeakObjectPtr<USaveGameSubsystem> WeakThis(this);
+		const FDelegateHandle Handle = Provider->OnLoadComplete().AddLambda(
+			[WeakThis, Provider, ThisLoadRequestId]()
+			{
+				if (USaveGameSubsystem* StrongThis = WeakThis.Get())
+				{
+					StrongThis->HandleSubsystemLoadCompleted(Provider, ThisLoadRequestId);
+				}
+			});
+
+		LoadCompleteHandles.Add(Provider, Handle);
 	}
 
 	const TArray<ISaveable*> SubsystemsToLoad = PendingSubsystems.Array();
 	for (ISaveable* Provider : SubsystemsToLoad)
 	{
-		// Retrieve the save data for the provider
-		FName ModuleType = Provider->GetSaveModuleType();
+		const FName ModuleType = Provider->GetSaveModuleType();
 		Provider->LoadDataFrom(SaveGameInstance ? SaveGameInstance->SaveModules.FindRef(ModuleType) : FInstancedStruct());
 	}
 
-	// Update play time tracking
+	if (SubsystemsToLoad.IsEmpty())
+	{
+		OnSaveGameLoadCompleted.Broadcast();
+	}
+
 	UpdatePlayTimeBySlot(SlotName);
 }
 
 void USaveGameSubsystem::InitializeMetaDataSaveGame()
 {
-	const FString& MetaDataSlotName = URPGSettings::GetRPGSettings()->SaveSlotPrefix + URPGSettings::GetRPGSettings()->MetaDataSaveSlotName;
+	const USaveSystemSettings* Settings = GetDefault<USaveSystemSettings>();
+	if (!Settings)
+	{
+		return;
+	}
+
+	const FString& MetaDataSlotName = Settings->SaveSlotPrefix + Settings->MetaDataSaveSlotName;
 	if (UGameplayStatics::DoesSaveGameExist(MetaDataSlotName, 0))
 	{
 		MetaDataSaveGame = Cast<UMetaDataSaveGame>(UGameplayStatics::LoadGameFromSlot(MetaDataSlotName, 0));
@@ -355,6 +471,15 @@ void USaveGameSubsystem::UpdateMetaData(const FString& SlotName)
 
 	// Update save time
 	NewMetaData.SaveTime = FDateTime::Now();
+	FRPGReleaseMigrationCatalog ReleaseCatalog;
+	const FRPGReleaseMigrationCatalogResult CatalogResult = FRPGReleaseMigrationCatalogReader::ReadCurrent(ReleaseCatalog);
+	if (!CatalogResult.IsSuccess())
+	{
+		UE_LOG(LogSaveSystem, Error, TEXT("Metadata update refused because the RPG release migration catalog is invalid: %s"),
+			*CatalogResult.Diagnostic);
+		return;
+	}
+	NewMetaData.SaveDataVersion = ReleaseCatalog.CurrentVersion;
 	
 	// Update play time
 	NewMetaData.PlayTime = LoadedPlayTime + (FDateTime::Now() - CurrentSessionStartTime);
@@ -371,7 +496,13 @@ void USaveGameSubsystem::DeleteMetaData(const FString& SlotName)
 
 void USaveGameSubsystem::SaveMetaData()
 {
-	const FString& MetaDataSlotName = URPGSettings::GetRPGSettings()->SaveSlotPrefix + URPGSettings::GetRPGSettings()->MetaDataSaveSlotName;
+	const USaveSystemSettings* Settings = GetDefault<USaveSystemSettings>();
+	if (!Settings)
+	{
+		return;
+	}
+
+	const FString& MetaDataSlotName = Settings->SaveSlotPrefix + Settings->MetaDataSaveSlotName;
 	bool bSuccess = UGameplayStatics::SaveGameToSlot(MetaDataSaveGame, MetaDataSlotName, 0);
 	if (!bSuccess)
 	{

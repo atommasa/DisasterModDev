@@ -69,10 +69,10 @@ void ARPGPlayerCameraManager::ActorCameraViewTransition(AActor* NewTargetActor, 
 
     TargetActor = NewTargetActor;
 
-    if (auto* SpringArm = PCOwner->GetPawn()->FindComponentByClass<URPGSpringArmComponent>())
+    if (URPGSpringArmComponent* SpringArm = PCOwner->GetPawn()->FindComponentByClass<URPGSpringArmComponent>())
     {
         const float LastTargetArmLength = SpringArm->TargetArmLength;
-        if (auto* NewSpringArm = TargetActor->FindComponentByClass<URPGSpringArmComponent>())
+        if (URPGSpringArmComponent* NewSpringArm = TargetActor->FindComponentByClass<URPGSpringArmComponent>())
         {
             NewSpringArm->TargetArmLength = LastTargetArmLength;
         }

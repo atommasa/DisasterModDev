@@ -36,6 +36,7 @@ public class RPGCore : ModuleRules
                 "GameplayAbilities",
                 "GameplayTasks",
                 "Chooser",
+				"RPGFlow",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

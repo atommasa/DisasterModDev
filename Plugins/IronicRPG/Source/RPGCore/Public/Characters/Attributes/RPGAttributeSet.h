@@ -92,8 +92,9 @@ protected:
 
 public: // AttributeSet Overrides
 	virtual void BindAttributeChangedDelegates(UAbilitySystemComponent* AbilitySystemComponent) {}
-	virtual TSet<FGameplayAttribute> GetSaveableAttributes() const { return TSet<FGameplayAttribute>(); }
 	virtual const FGameplayAttribute GetMaxClampAttribute(const FGameplayAttribute& Attribute) const { return nullptr; }
+
+	void GetSaveableAttributes(TSet<FGameplayAttribute>& OutSet) const;
 
 public: // Save Game Functions
 	// Save data structure for character attributes
@@ -103,6 +104,8 @@ public: // Save Game Functions
 	// Load data structure for character attributes
 	UFUNCTION(BlueprintCallable, Category = "Save Game")
 	virtual void LoadAttributesFrom(const FCharacterSaveData& InSaveData);
+
+
 
 private:
 	bool bIsInitializing = false;

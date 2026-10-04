@@ -19,10 +19,9 @@ protected:
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
 
 	virtual void BindAttributeChangedDelegates(UAbilitySystemComponent* AbilitySystemComponent) override;
-	virtual TSet<FGameplayAttribute> GetSaveableAttributes() const override;
 
 public:
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes | Favorability")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes | Favorability")
 	FGameplayAttributeData Favorability = 0.0f;
 	ATTRIBUTE_ACCESSORS(USocialAttributeSet, Favorability);
 

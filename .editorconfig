@@ -1,5 +1,7 @@
 [*.{cpp,h}]
 
+end_of_line = crlf
+
 # Naming convention rules (note: currently need to be ordered from more to less specific)
 
 cpp_naming_rule.aactor_prefixed.symbols                    = aactor_class

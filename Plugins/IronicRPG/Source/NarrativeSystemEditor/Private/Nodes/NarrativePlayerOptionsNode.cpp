@@ -15,12 +15,12 @@ TSharedPtr<SGraphNode> UNarrativePlayerOptionsNode::CreateVisualWidget()
 
 void UNarrativePlayerOptionsNode::AllocateDefaultPins()
 {
-	SetNodeInfo(NewObject<UNarrativePlayerOptionsNodeInfo>(this));
+	SetNodeInfoObject(NewObject<UNarrativePlayerOptionsNodeInfo>(this));
 
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
 	if (UNarrativePlayerOptionsNodeInfo* PlayerOptionsNodeInfo = GetNodeInfoAs<UNarrativePlayerOptionsNodeInfo>())
 	{
-		PlayerOptionsNodeInfo->Options.Add({ });
+		PlayerOptionsNodeInfo->Options.Add({});
 	}
 
 	SyncPin();
@@ -73,7 +73,7 @@ void UNarrativePlayerOptionsNode::GetNodeContextMenuActions(class UToolMenu* Men
 
 void UNarrativePlayerOptionsNode::SyncPin()
 {
-	UNarrativePlayerOptionsNodeInfo* Info = Cast<UNarrativePlayerOptionsNodeInfo>(GetNodeInfo());
+	UNarrativePlayerOptionsNodeInfo* Info = Cast<UNarrativePlayerOptionsNodeInfo>(GetNarrativeNodeInfo());
 	if (!Info)
 	{
 		return;
@@ -102,14 +102,9 @@ void UNarrativePlayerOptionsNode::SyncPin()
 	{
 		const int32 Index = OutputPins.Num();
 
-		UEdGraphPin* NewPin = CreateNarrativePin(EGPD_Output, FName(*FString::FromInt(Index)));
+		UEdGraphPin* NewPin = CreateRPGGraphPin(EGPD_Output, FName(*FString::FromInt(Index)));
 
 		OutputPins.Add(NewPin);
-	}
-
-	for (int32 Index = 0; Index < Info->Options.Num(); ++Index)
-	{
-		OutputPins[Index]->PinFriendlyName = Info->Options[Index];
 	}
 
 	if (UEdGraph* Graph = GetGraph())
@@ -118,54 +113,19 @@ void UNarrativePlayerOptionsNode::SyncPin()
 	}
 }
 
-FText UNarrativePlayerOptionsNode::CreateCallableBindingComment() const
+UFunction* UNarrativePlayerOptionsNode::GetFunctionAsSignature() const
 {
-	return FText::FromString(TEXT("This event will be called when the PlayerOptionsNode starts / commits / finishes"));
+	return GetNarrativeNodeInfo()->FindFunctionChecked(GET_FUNCTION_NAME_CHECKED(UNarrativePlayerOptionsNodeInfo, IsOptionSelectable));
 }
 
-void UNarrativePlayerOptionsNode::CreateCallableBindingParameterPins(UK2Node_EditablePinBase* InNode)
+FName UNarrativePlayerOptionsNode::CreateCallableBindingName() const
 {
-	FNarrativeEditorUtils::CreateUserDefinedPinFor(
-		InNode,
-		TEXT("DialogueEventType"),
-		FEdGraphPinType(
-			UEdGraphSchema_K2::PC_Byte,
-			NAME_None,
-			StaticEnum<EDialogueEventType>(),
-			EPinContainerType::None,
-			false,
-			FEdGraphTerminalType()
-		),
-		EGPD_Output
-	);
+	return FName(*FString::Printf(TEXT("IsOptionSelectable_%s"), *NodeGuid.ToString()));
+}
 
-	FNarrativeEditorUtils::CreateUserDefinedPinFor(
-		InNode,
-		TEXT("PlayerSelectedIndex"),
-		FEdGraphPinType(
-			UEdGraphSchema_K2::PC_Int,
-			NAME_None,
-			nullptr,
-			EPinContainerType::None,
-			false,
-			FEdGraphTerminalType()
-		),
-		EGPD_Output
-	);
-
-	FNarrativeEditorUtils::CreateUserDefinedPinFor(
-		InNode,
-		TEXT("PlayerSelectedOption"),
-		FEdGraphPinType(
-			UEdGraphSchema_K2::PC_Text,
-			NAME_None,
-			nullptr,
-			EPinContainerType::None,
-			false,
-			FEdGraphTerminalType()
-		),
-		EGPD_Output
-	);
+FText UNarrativePlayerOptionsNode::CreateCallableBindingComment() const
+{
+	return FText::FromString(TEXT("This function determines whether the option at the corresponding index is selectable."));
 }
 
 void UNarrativePlayerOptionsNode::AddOption()
@@ -174,11 +134,11 @@ void UNarrativePlayerOptionsNode::AddOption()
 	Modify();
 	GetGraph()->Modify();
 	
-	if (UNarrativePlayerOptionsNodeInfo* PlayerOptionsNodeInfo = Cast<UNarrativePlayerOptionsNodeInfo>(GetNodeInfo()))
+	if (UNarrativePlayerOptionsNodeInfo* PlayerOptionsNodeInfo = Cast<UNarrativePlayerOptionsNodeInfo>(GetNarrativeNodeInfo()))
 	{
 		PlayerOptionsNodeInfo->Modify();
 
-		PlayerOptionsNodeInfo->Options.Add(FText::FromString(TEXT("")));
+		PlayerOptionsNodeInfo->Options.Add({});
 	}
 
 	SyncPin();
@@ -191,7 +151,7 @@ void UNarrativePlayerOptionsNode::DeleteOption()
 	Modify();
 	GetGraph()->Modify();
 
-	if (UNarrativePlayerOptionsNodeInfo* PlayerOptionsNodeInfo = Cast<UNarrativePlayerOptionsNodeInfo>(GetNodeInfo()))
+	if (UNarrativePlayerOptionsNodeInfo* PlayerOptionsNodeInfo = Cast<UNarrativePlayerOptionsNodeInfo>(GetNarrativeNodeInfo()))
 	{
 		PlayerOptionsNodeInfo->Modify();
 
@@ -223,7 +183,7 @@ void UNarrativePlayerOptionsNode::DeleteOption()
 	GetGraph()->NotifyNodeChanged(this);
 }
 
-TSharedRef<SWidget> SNarrativePlayerOptionsNode::CreateNarrativeNodeCenterContent()
+TSharedRef<SWidget> SNarrativePlayerOptionsNode::CreateNodeNodeCenterContent()
 {
 	return SNew(SVerticalBox)
 		+ SVerticalBox::Slot()

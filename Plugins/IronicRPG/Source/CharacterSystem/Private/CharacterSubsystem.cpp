@@ -2,13 +2,15 @@
 
 
 #include "CharacterSubsystem.h"
-#include "RPGSettings.h"
+#include "Settings/CharacterSystemSettings.h"
 #include "SaveGameSubsystem.h"
 #include "Kismet/GameplayStatics.h"
 
 #include "Characters/Attributes/RPGAttributeSet.h"
 #include "Characters/Components/CharacterAbilitySystemComponent.h"
+#include "Characters/Components/RPGCharacterMovementComponent.h"
 #include "Characters/CharacterControlComponent.h"
+#include "Characters/Components/CombatComponent.h"
 
 #include "Camera/RPGPlayerCameraManager.h"
 #include "Camera/CameraComponent.h"
@@ -25,9 +27,9 @@ DEFINE_LOG_CATEGORY(LogCharacterSubsystem);
 void UCharacterSubsystem::Initialize(FSubsystemCollectionBase& Collection)
 {
 	Super::Initialize(Collection);
-	
+
 	// Load settings
-	const URPGSettings* Settings = URPGSettings::GetRPGSettings();
+	const UCharacterSystemSettings* Settings = GetDefault<UCharacterSystemSettings>();
 	if (!Settings)
 	{
 		return;
@@ -87,7 +89,7 @@ void UCharacterSubsystem::ModifyCharactersData(const TArray<FRPGId>& Ids, UGamep
 		}
 
 		int32 InstanceIndex = PartyMemberIds.IndexOfByKey(Id);
-		if (InstanceIndex != INDEX_NONE)
+		if (PartyMemberGuids.IsValidIndex(InstanceIndex))
 		{
 			if (ABaseCharacter* Instance = InstanceCharacters.FindRef(PartyMemberGuids[InstanceIndex]))
 			{
@@ -158,49 +160,126 @@ bool UCharacterSubsystem::IsAvailable(const FRPGId& Id) const
 	return false;
 }
 
-ABaseCharacter* UCharacterSubsystem::SpawnCharacter(const FRPGId& Id, const TSubclassOf<ABaseCharacter> CharacterClass, const FVector Location, const FRotator Rotation, const bool bAsync)
+FRPGVoidCoroutine UCharacterSubsystem::SpawnCharacterAsync(
+	FRPGId Id,
+	TSubclassOf<ABaseCharacter> CharacterClass,
+	FVector Location,
+	FRotator Rotation,
+	ABaseCharacter*& OutCharacter,
+	FLatentActionInfo LatentInfo)
 {
-	if (!Id.IsValid())
+	OutCharacter = nullptr;
+
+	const TRPGAsyncResult<ABaseCharacter*> Result = co_await SpawnCharacterCoreAsync(Id, CharacterClass, Location, Rotation);
+
+	if (Result.IsSuccess() && IsValid(Result.Value))
 	{
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Spawn character with invalid Character Id!"));
-		return nullptr;
-	}
-
-	if (bAsync)
-	{
-		FActorSpawnParameters Params;
-		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
-		Params.OverrideLevel = GetWorld()->PersistentLevel;
-
-		// Spawn the character actor immediately, but without data
-		ABaseCharacter* NewCharacter = GetWorld()->SpawnActor<ABaseCharacter>(CharacterClass, Location, Rotation, Params);
-		const FGuid CharacterGuid = NewCharacter->GetInstanceId();
-		if (!InstanceCharacters.Contains(CharacterGuid))
-		{
-			UE_LOG(LogTemp, Display, TEXT("Spawning async character with Guid: %s"), *CharacterGuid.ToString());
-			AddInstanceCharacter(NewCharacter);
-		}
-
-		// Apply data when asset is loaded
-		URPGAssetLibrary::GetAssetByRPGIdAsync(Id, { "Character", "UI" }, [this, CharacterGuid](URPGPrimaryAsset* Asset)
-			{
-				OnCharacterToSpawnLoaded(Asset, CharacterGuid);
-			});
-
-		return NewCharacter;
+		OutCharacter = Result.Value;
 	}
 	else
 	{
-		URPGPrimaryAsset* Asset = URPGAssetLibrary::GetAssetByRPGId(Id);
-		return SpawnCharacterByAsset(Cast<UCharacterAsset>(Asset), CharacterClass, Location, Rotation);
+		UE_LOG(
+			LogCharacterSubsystem,
+			Error,
+			TEXT("SpawnCharacterAsync failed for Id: %s"),
+			*Id.ToString());
 	}
+
+	co_return;
+}
+
+TRPGCoroutine<TRPGAsyncResult<ABaseCharacter*>> UCharacterSubsystem::SpawnCharacterCoreAsync(
+	FRPGId Id,
+	TSubclassOf<ABaseCharacter> CharacterClass,
+	FVector Location,
+	FRotator Rotation)
+{
+	if (!Id.IsValid())
+	{
+		co_return TRPGAsyncResult<ABaseCharacter*>::Failure(
+			TEXT("Character.InvalidId"),
+			TEXT("Cannot spawn a character with an invalid character Id."));
+	}
+
+	UWorld* World = GetWorld();
+	if (!IsValid(World))
+	{
+		co_return TRPGAsyncResult<ABaseCharacter*>::Failure(
+			TEXT("Character.InvalidWorld"),
+			TEXT("Character subsystem does not have a valid world."));
+	}
+
+	TSubclassOf<ABaseCharacter> SpawnClass = CharacterClass;
+	if (!SpawnClass)
+	{
+		SpawnClass = PlayableCharacterClass;
+	}
+	if (!SpawnClass)
+	{
+		SpawnClass = ABaseCharacter::StaticClass();
+	}
+
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride =
+		ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+	Params.OverrideLevel = World->PersistentLevel;
+
+	// Spawn the shell immediately. The coroutine does not return success until
+	// its asset and character data are fully initialized.
+	ABaseCharacter* NewCharacter = World->SpawnActor<ABaseCharacter>(SpawnClass, Location, Rotation, Params);
+
+	if (!IsValid(NewCharacter))
+	{
+		co_return TRPGAsyncResult<ABaseCharacter*>::Failure(
+			TEXT("Character.SpawnFailed"),
+			TEXT("Failed to spawn the character actor."));
+	}
+
+	const FGuid CharacterGuid = NewCharacter->GetInstanceId();
+	AddInstanceCharacter(NewCharacter);
+
+	const auto LoadResult = co_await URPGAssetLibrary::LoadAssetByRPGIdAsync<UCharacterAsset>(
+			Id,
+			{ "Character", "UI" });
+
+	if (!LoadResult.IsSuccess() || !IsValid(LoadResult.Value))
+	{
+		DespawnCharacterInstance(CharacterGuid);
+
+		co_return TRPGAsyncResult<ABaseCharacter*>::Failure(
+			TEXT("Character.AssetLoadFailed"),
+			TEXT("Failed to load the character asset."));
+	}
+
+	const TRPGAsyncResult<> InitResult = co_await InitializeCharacterAndWait(LoadResult.Value, CharacterGuid);
+
+	if (!InitResult.IsSuccess())
+	{
+		DespawnCharacterInstance(CharacterGuid);
+
+		co_return TRPGAsyncResult<ABaseCharacter*>::Failure(
+			TEXT("Character.InitializationFailed"),
+			TEXT("Failed to initialize the character."));
+	}
+
+	ABaseCharacter* InitializedCharacter = InstanceCharacters.FindRef(CharacterGuid);
+
+	if (!IsValid(InitializedCharacter))
+	{
+		co_return TRPGAsyncResult<ABaseCharacter*>::Failure(
+			TEXT("Character.Destroyed"),
+			TEXT("Character was destroyed during initialization."));
+	}
+
+	co_return TRPGAsyncResult<ABaseCharacter*>::Success(
+		InitializedCharacter);
 }
 
 ABaseCharacter* UCharacterSubsystem::SpawnCharacterByAsset(UCharacterAsset* Asset, const TSubclassOf<ABaseCharacter> CharacterClass, const FVector Location, const FRotator Rotation)
 {
 	if (!Asset)
 	{
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT(__FUNCTION__"Invalid Character Asset!"));
+		UE_LOG(LogCharacterSubsystem, Warning, TEXT(__FUNCTION__ "Invalid Character Asset!"));
 		return nullptr;
 	}
 
@@ -215,112 +294,224 @@ ABaseCharacter* UCharacterSubsystem::SpawnCharacterByAsset(UCharacterAsset* Asse
 	Params.OverrideLevel = GetWorld()->PersistentLevel;
 
 	ABaseCharacter* NewCharacter = GetWorld()->SpawnActor<ABaseCharacter>(SpawnClass, Location, Rotation, Params);
-	if (NewCharacter)
+	if (!IsValid(NewCharacter))
 	{
-		FCharacterSaveData* SavedData = CharacterDataMap.Find(Asset->GetId());
-		if (SavedData)
-		{
-			NewCharacter->InitCharacterData(Asset, *SavedData);
-		}
-		else
-		{
-			NewCharacter->InitCharacterDataDefault(Asset);
-		}
-
-		AddInstanceCharacter(NewCharacter);
-
-		return NewCharacter;
+		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Failed to spawn character for asset: %s"), *GetNameSafe(Asset));
+		return nullptr;
 	}
 
-	return nullptr;
+	AddInstanceCharacter(NewCharacter);
+
+	if (FCharacterSaveData* SavedData = CharacterDataMap.Find(Asset->GetId()))
+	{
+		NewCharacter->InitCharacterData(Asset, *SavedData);
+	}
+	else
+	{
+		NewCharacter->InitCharacterDataDefault(Asset);
+	}
+
+	return NewCharacter;
 }
 
-void UCharacterSubsystem::DespawnCharacter(const FGuid& Guid)
+void UCharacterSubsystem::DespawnCharacterInstance(const FGuid& Guid)
 {
-	if (!Guid.IsValid() || !InstanceCharacters.Contains(Guid))
+	if (!Guid.IsValid())
 	{
 		return;
 	}
 
-	if (ABaseCharacter* Character = InstanceCharacters[Guid])
+	if (ABaseCharacter* Character = InstanceCharacters.FindRef(Guid))
 	{
-		// Save character data before destroying
 		SaveCharacterDataToMap(Character);
-
 		Character->Destroy();
 	}
 
 	InstanceCharacters.Remove(Guid);
+}
 
-	// Also remove form PartyMemberGuids
-	if (PartyMemberGuids.Contains(Guid))
+void UCharacterSubsystem::DespawnCharacter(const FGuid& Guid)
+{
+	if (!Guid.IsValid())
 	{
-		PartyMemberGuids.Remove(Guid);
+		return;
+	}
+
+	DespawnCharacterInstance(Guid);
+
+	const int32 PartyIndex = PartyMemberGuids.IndexOfByKey(Guid);
+	if (PartyIndex != INDEX_NONE)
+	{
+		PartyMemberGuids.RemoveAt(PartyIndex);
+		if (PartyMemberIds.IsValidIndex(PartyIndex))
+		{
+			PartyMemberIds.RemoveAt(PartyIndex);
+		}
+
+		PlayerPartyIndex = PartyMemberIds.IsEmpty()
+			? INDEX_NONE
+			: FMath::Clamp(PlayerPartyIndex, 0, PartyMemberIds.Num() - 1);
 	}
 }
 
-void UCharacterSubsystem::OnCharacterToSpawnLoaded(URPGPrimaryAsset* Asset, const FGuid InGuid)
+void UCharacterSubsystem::PartyTravelStart()
 {
-	if (!Asset)
+	for (ABaseCharacter* Character : GetPartyMemberInstances())
 	{
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Failed to load character asset!"));
-		return;
-	}
-
-	if (!InGuid.IsValid())
-	{
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Invalid Guid provided to OnCharacterToSpawnLoaded!"));
-		return;
-	}
-
-	if (TObjectPtr<ABaseCharacter> Instance = InstanceCharacters.FindRef(InGuid))
-	{
-		// Save character data before applying new data
-		SaveCharacterDataToMap(Instance);
-
-		if (const UCharacterAsset* CharacterAsset = Cast<UCharacterAsset>(Asset))
+		if (!IsValid(Character))
 		{
-			FCharacterSaveData* SavedData = CharacterDataMap.Find(Asset->GetId());
-			if (SavedData)
-			{
-				Instance->InitCharacterData(CharacterAsset, *SavedData);
-			}
-			else
-			{
-				Instance->InitCharacterDataDefault(CharacterAsset);
-			}
-
-			Instance->OnCharacterDataInitialized.AddLambda([this](ABaseCharacter*)
-				{
-					PendingPartyInitCount--;
-					TryBroadcastPartyReady();
-				});
+			continue;
 		}
-		else
+
+		Character->SetActorTickEnabled(false);
+		Character->SetActorEnableCollision(false);
+
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
 		{
-			UE_LOG(LogCharacterSubsystem, Warning, TEXT("Loaded asset is not a Character Asset!"));
+			Movement->StopMovementImmediately();
+			Movement->DisableMovement();
 		}
 	}
 }
 
-void UCharacterSubsystem::TryBroadcastPartyReady()
+void UCharacterSubsystem::PartyTravelEnd()
 {
-	if (bPartyTeleportDone && PendingPartyInitCount == 0)
+	const TArray<ABaseCharacter*>& Instances = GetPartyMemberInstances();
+
+	if (Instances.IsEmpty())
 	{
-		bIsSpawningPartyMembers = false;
-		OnPartyReady.Broadcast();
-		OnPartyConstructed.Broadcast();
+		// Core coroutines are eager. Party construction will continue asynchronously
+		// and broadcast OnPartyReady only after every member is initialized.
+		SpawnPartyMembersCoreAsync(
+			FVector::ZeroVector,
+			FRotator::ZeroRotator,
+			ESpawnPartyMode::KeepControlSameCharacter);
+		return;
+	}
+
+	for (ABaseCharacter* Character : Instances)
+	{
+		if (!Character)
+		{
+			continue;
+		}
+
+		Character->SetActorEnableCollision(true);
+		Character->SetActorTickEnabled(true);
+
+		if (UCharacterMovementComponent* Movement = Character->GetCharacterMovement())
+		{
+			Movement->SetMovementMode(MOVE_Walking);
+		}
+	}
+
+	if (ARPGPlayerController* PlayerController = Cast<ARPGPlayerController>(UGameplayStatics::GetPlayerController(this, 0)))
+	{
+		ABaseCharacter* PlayerCharacter = GetPlayerCharacter();
+
+		if (PlayerCharacter && PlayerController->GetPawn() != PlayerCharacter)
+		{
+			PlayerController->PossessCharacterWithMode(PlayerCharacter, ERPGControlMode::None);
+		}
 	}
 }
 
-TArray<APlayableCharacter*> UCharacterSubsystem::GetPartyMembers() const
+TRPGCoroutine<TRPGAsyncResult<>> UCharacterSubsystem::InitializeCharacterAndWait(UCharacterAsset* Asset, FGuid InGuid)
 {
-	TArray<APlayableCharacter*> Result;
+	if (!IsValid(Asset))
+	{
+		co_return TRPGAsyncResult<>::Failure(
+			TEXT("Character.InvalidAsset"),
+			TEXT("Character asset could not be loaded."));
+	}
+
+	ABaseCharacter* Instance = InstanceCharacters.FindRef(InGuid);
+	if (!IsValid(Instance))
+	{
+		co_return TRPGAsyncResult<>::Failure(
+			TEXT("Character.InvalidCharacter"),
+			TEXT("Character instance no longer exists."));
+	}
+
+	// This child coroutine is eager, so WaitDelegate is bound before InitCharacterData
+	// can synchronously broadcast OnCharacterDataInitialized.
+	TRPGCoroutine<TRPGAsyncResult<>> InitializationWait =
+		[Instance]() -> TRPGCoroutine<TRPGAsyncResult<>>
+		{
+			const auto WaitResult =
+				co_await RPGFlow::WaitDelegate(
+					Instance,
+					Instance->OnCharacterDataInitialized);
+
+			if (WaitResult.WasOwnerEndedPlay())
+			{
+				co_return TRPGAsyncResult<>::Failure(
+					TEXT("Character.EndedPlay"),
+					TEXT("Character ended play during initialization."));
+			}
+
+			if (WaitResult.WasOwnerDestroyed())
+			{
+				co_return TRPGAsyncResult<>::Failure(
+					TEXT("Character.Destroyed"),
+					TEXT("Character was destroyed during initialization."));
+			}
+
+			if (WaitResult.WasCanceled())
+			{
+				co_return TRPGAsyncResult<>::Failure(
+					TEXT("Character.Canceled"),
+					TEXT("Character initialization was canceled."));
+			}
+
+			if (!WaitResult.WasCompleted())
+			{
+				co_return TRPGAsyncResult<>::Failure(
+					TEXT("Character.InitializationFailed"),
+					TEXT("Character initialization did not complete."));
+			}
+
+			co_return TRPGAsyncResult<>::Success();
+		}();
+
+	SaveCharacterDataToMap(Instance);
+
+	if (const FCharacterSaveData* SavedData =
+		CharacterDataMap.Find(Asset->GetId()))
+	{
+		Instance->InitCharacterData(Asset, *SavedData);
+	}
+	else
+	{
+		Instance->InitCharacterDataDefault(Asset);
+	}
+
+	co_return co_await InitializationWait;
+}
+
+TArray<FRPGId> UCharacterSubsystem::GetPartyMembers() const
+{
+	return PartyMemberIds;
+}
+
+ABaseCharacter* UCharacterSubsystem::GetPlayerCharacter() const
+{
+	if (!PartyMemberGuids.IsValidIndex(PlayerPartyIndex))
+	{
+		return nullptr;
+	}
+
+	return InstanceCharacters.FindRef(PartyMemberGuids[PlayerPartyIndex]);
+}
+
+TArray<ABaseCharacter*> UCharacterSubsystem::GetPartyMemberInstances() const
+{
+	TArray<ABaseCharacter*> Result;
 	for (const FGuid& Guid : PartyMemberGuids)
 	{
 		if (Guid.IsValid())
 		{
-			if (APlayableCharacter* Member = Cast<APlayableCharacter>(InstanceCharacters.FindRef(Guid)))
+			if (ABaseCharacter* Member = Cast<ABaseCharacter>(InstanceCharacters.FindRef(Guid)))
 			{
 				Result.Add(Member);
 			}
@@ -330,204 +521,287 @@ TArray<APlayableCharacter*> UCharacterSubsystem::GetPartyMembers() const
 	return Result;
 }
 
-ABaseCharacter* UCharacterSubsystem::GetPlayerCharacter() const
+ABaseCharacter* UCharacterSubsystem::GetPartyMemberInstanceById(const FRPGId& Id) const
 {
-	TArray<ABaseCharacter*> PartyMemberInstances = GetPartyMemberInstances();
-	
-	return PartyMemberInstances.IsValidIndex(PlayerPartyIndex) ? PartyMemberInstances[PlayerPartyIndex] : nullptr;
-}
-
-TArray<ABaseCharacter*> UCharacterSubsystem::GetPartyMemberInstances() const
-{
-	TArray<ABaseCharacter*> PartyMemberInstances;
-	for (const FGuid& Guid : PartyMemberGuids)
+	const int32 Index = PartyMemberIds.IndexOfByKey(Id);
+	if (!PartyMemberGuids.IsValidIndex(Index))
 	{
-		if (ABaseCharacter* Instance = InstanceCharacters.FindRef(Guid))
-		{
-			PartyMemberInstances.Add(Instance);
-		}
+		return nullptr;
 	}
 
-	return PartyMemberInstances;
+	return InstanceCharacters.FindRef(PartyMemberGuids[Index]);
 }
 
-ABaseCharacter* UCharacterSubsystem::GetPartyMemberInstanceById(const FRPGId Id) const
+FRPGVoidCoroutine UCharacterSubsystem::SpawnPartyMembersAsync(
+	FVector Location,
+	FRotator Rotation,
+	ESpawnPartyMode SpawnPartyMode,
+	FLatentActionInfo LatentInfo)
 {
-	TArray<ABaseCharacter*> PartyMemberInstances = GetPartyMemberInstances();
-	int32 Index = PartyMemberIds.IndexOfByKey(Id);
-	if (Index != INDEX_NONE)
+	const TRPGAsyncResult<> Result = co_await SpawnPartyMembersCoreAsync(
+			Location,
+			Rotation,
+			SpawnPartyMode);
+
+	if (!Result.IsSuccess())
 	{
-		return PartyMemberInstances[Index];
+		UE_LOG(
+			LogCharacterSubsystem,
+			Error,
+			TEXT("SpawnPartyMembersAsync failed."));
 	}
 
-	return nullptr;
+	co_return;
 }
 
-void UCharacterSubsystem::SpawnPartyMembers(const FVector Location, const FRotator Rotation, bool bAsync, ESpawnPartyMode SpawnPartyMode)
+TRPGCoroutine<TRPGAsyncResult<>> UCharacterSubsystem::SpawnPartyMembersCoreAsync(
+	FVector Location,
+	FRotator Rotation,
+	ESpawnPartyMode SpawnPartyMode)
 {
-	SpawnNewPartyMembers(PartyMemberIds, Location, Rotation, bAsync, SpawnPartyMode);
+	co_return co_await SpawnNewPartyMembersCoreAsync(
+		PartyMemberIds,
+		Location,
+		Rotation,
+		SpawnPartyMode);
 }
 
-void UCharacterSubsystem::SpawnPartyMembers(const FTransform Transform, bool bAsync, ESpawnPartyMode SpawnPartyMode)
+FRPGVoidCoroutine UCharacterSubsystem::SpawnNewPartyMembersAsync(
+	TArray<FRPGId> NewParty,
+	FVector Location,
+	FRotator Rotation,
+	ESpawnPartyMode SpawnPartyMode,
+	FLatentActionInfo LatentInfo)
 {
-	SpawnNewPartyMembers(PartyMemberIds, Transform.GetLocation(), Transform.Rotator(), bAsync, SpawnPartyMode);
+	const TRPGAsyncResult<> Result =
+		co_await SpawnNewPartyMembersCoreAsync(
+			MoveTemp(NewParty),
+			Location,
+			Rotation,
+			SpawnPartyMode);
+
+	if (!Result.IsSuccess())
+	{
+		UE_LOG(
+			LogCharacterSubsystem,
+			Error,
+			TEXT("SpawnNewPartyMembersAsync failed."));
+	}
+
+	co_return;
 }
 
-void UCharacterSubsystem::SpawnNewPartyMembers(TArray<FRPGId> NewParty, const FVector Location, const FRotator Rotation, bool bAsync, ESpawnPartyMode SpawnPartyMode)
+TRPGCoroutine<TRPGAsyncResult<>> UCharacterSubsystem::SpawnNewPartyMembersCoreAsync(
+	TArray<FRPGId> NewParty,
+	FVector Location,
+	FRotator Rotation,
+	ESpawnPartyMode SpawnPartyMode)
 {
 	if (bIsSpawningPartyMembers)
 	{
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Cannot spawn party members while another spawn is in progress!"));
-		return;
+		co_return TRPGAsyncResult<>::Failure(
+			TEXT("Party.SpawnInProgress"),
+			TEXT("Another party spawn operation is already in progress."));
 	}
 
-	bIsSpawningPartyMembers = true;
-	PendingPartyInitCount = 0;
-	bPartyTeleportDone = false;
-
-	if (NewParty.IsEmpty())
+	if (!PlayableCharacterClass)
 	{
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT("NewParty is empty!"));
-		return;
+		co_return TRPGAsyncResult<>::Failure(
+			TEXT("Party.InvalidCharacterClass"),
+			TEXT("PlayableCharacterClass is null."));
 	}
+
+	NewParty.RemoveAll(
+		[](const FRPGId& MemberId)
+		{
+			return !MemberId.IsValid();
+		});
 
 	if (NewParty.Num() > MaxPartyMembers)
 	{
 		NewParty.SetNum(MaxPartyMembers);
 
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT("NewParty exceeds MaxPartyMembers. Truncated."));
+		UE_LOG(
+			LogCharacterSubsystem,
+			Warning,
+			TEXT("NewParty exceeds MaxPartyMembers. Truncated."));
 	}
 
-	NewParty.RemoveAll([](const FRPGId& MemberId) {
-		return !MemberId.IsValid();
-		});
-
-	if (PartyMemberGuids.Num() < NewParty.Num())
+	if (NewParty.IsEmpty())
 	{
-		PartyMemberGuids.SetNum(NewParty.Num());
+		co_return TRPGAsyncResult<>::Failure(
+			TEXT("Party.Empty"),
+			TEXT("Cannot construct an empty party."));
 	}
 
-	switch(SpawnPartyMode)
+	bIsSpawningPartyMembers = true;
+	bPartyTeleportDone = false;
+
+	const TArray<FRPGId> OldPartyIds = PartyMemberIds;
+	const TArray<FGuid> OldPartyGuids = PartyMemberGuids;
+	const int32 OldPlayerPartyIndex = PlayerPartyIndex;
+
+	FRPGId PreviouslyControlledId;
+	if (SpawnPartyMode == ESpawnPartyMode::KeepControlSameCharacter && OldPartyIds.IsValidIndex(OldPlayerPartyIndex))
 	{
-		case ESpawnPartyMode::KeepControlSameCharacter:
+		PreviouslyControlledId = OldPartyIds[OldPlayerPartyIndex];
+	}
+
+	// Candidate arrays are not exposed until every new character is ready.
+	TArray<FGuid> CandidatePartyGuids;
+	CandidatePartyGuids.SetNum(NewParty.Num());
+
+	TSet<FGuid> ReusedGuids;
+
+	for (int32 NewIndex = 0; NewIndex < NewParty.Num(); ++NewIndex)
+	{
+		for (int32 OldIndex = 0; OldIndex < OldPartyIds.Num(); ++OldIndex)
 		{
-			int32 NewPlayerIndex = NewParty.IndexOfByKey(PartyMemberIds[PlayerPartyIndex]);
-			if (NewPlayerIndex == INDEX_NONE)
+			if (OldPartyIds[OldIndex] != NewParty[NewIndex] || !OldPartyGuids.IsValidIndex(OldIndex))
 			{
-				NewPlayerIndex = 0; // Unaveable to first member
-			}
-			
-			PartyMemberGuids.Swap(PlayerPartyIndex, NewPlayerIndex);
-
-			PlayerPartyIndex = NewPlayerIndex;
-
-			break;
-		}
-
-		case ESpawnPartyMode::ByPlayerPartyIndex:
-		{
-			if (ABaseCharacter* CurrentCharacter = Cast<ABaseCharacter>(UGameplayStatics::GetPlayerCharacter(GetWorld(), 0)))
-			{
-				if (const FGuid* CurrentGuid = InstanceCharacters.FindKey(CurrentCharacter))
-				{
-					int32 CurrentIndex = PartyMemberGuids.IndexOfByKey(*CurrentGuid);
-					if (CurrentIndex != INDEX_NONE)
-					{
-						PartyMemberGuids.Swap(CurrentIndex, PlayerPartyIndex);
-					}
-				}
+				continue;
 			}
 
-			break;
-		}
-	}
-
-	PartyMemberGuids.RemoveAll([](const FGuid& MemberGuid) {
-		return !MemberGuid.IsValid();
-		});
-
-	TArray<FRPGId> ToSpawn;
-	int32 Max = FMath::Max(PartyMemberGuids.Num(), NewParty.Num());
-	for (int32 i = 0; i < Max; i++)
-	{
-		const bool bInstanceValid = PartyMemberGuids.IsValidIndex(i) && InstanceCharacters.Contains(PartyMemberGuids[i]);
-		const bool bNewPartyValid = NewParty.IsValidIndex(i);
-		
-		// Should spawn new actor 
-		if (!bInstanceValid && bNewPartyValid)
-		{ 
-			ToSpawn.Add(NewParty[i]);
-		}
-		
-		// Should despawn old actor
-		else if (bInstanceValid && !bNewPartyValid)
-		{ 
-			const FGuid RemoveGuid = PartyMemberGuids[i]; // We should not remove by refference, as the array may change during despawn
-			DespawnCharacter(RemoveGuid);
-		}
-		
-		// Set new Id to the current character instance
-		else if (bInstanceValid && bNewPartyValid)
-		{
-			ABaseCharacter* Instance = InstanceCharacters[PartyMemberGuids[i]];
-
-			// Save current character data before changing
-			SaveCharacterDataToMap(Instance);
-
-			const FRPGId& NewId = NewParty[i];
-
-			if (CharacterDataMap.Contains(NewId))
+			const FGuid CandidateGuid = OldPartyGuids[OldIndex];
+			if (!CandidateGuid.IsValid() || ReusedGuids.Contains(CandidateGuid))
 			{
-				Instance->InitCharacterDataById(NewId, CharacterDataMap[NewId]);
+				continue;
 			}
-			else
-			{ 
-				Instance->InitCharacterDataDefaultById(NewId);
-			} 
-		} 
+
+			ABaseCharacter* Candidate = InstanceCharacters.FindRef(CandidateGuid);
+
+			if (IsValid(Candidate) && Candidate->GetId() == NewParty[NewIndex])
+			{
+				CandidatePartyGuids[NewIndex] = CandidateGuid;
+				ReusedGuids.Add(CandidateGuid);
+				break;
+			}
+		}
 	}
 
-	PartyMemberIds = NewParty;
-
-	TSubclassOf<ABaseCharacter> SpawnClass = PlayableCharacterClass;
-	if (!SpawnClass)
+	struct FPendingPartySpawn
 	{
-		SpawnClass = APlayableCharacter::StaticClass();
-	}
+		int32 PartyIndex = INDEX_NONE;
+		TRPGCoroutine<TRPGAsyncResult<ABaseCharacter*>> Task;
+	};
 
-	// Spawn each party member
-	for (const FRPGId& SpawnId : ToSpawn)
+	TArray<FPendingPartySpawn> PendingSpawns;
+	PendingSpawns.Reserve(NewParty.Num());
+
+	// SpawnCharacterCoreAsync is eager. Every task starts here before we await
+	// any individual result, so asset loading still proceeds concurrently.
+	for (int32 Index = 0; Index < NewParty.Num(); ++Index)
 	{
-		if (!SpawnId.IsValid())
+		if (CandidatePartyGuids[Index].IsValid())
 		{
 			continue;
 		}
 
-		UE_LOG(LogCharacterSubsystem, Warning, TEXT("Spawn %s"), *SpawnId.ToString());
+		FPendingPartySpawn& Pending = PendingSpawns.AddDefaulted_GetRef();
 
-		ABaseCharacter* NewCharacter = SpawnCharacter(SpawnId, SpawnClass, Location, Rotation, bAsync);
+		Pending.PartyIndex = Index;
+		Pending.Task = SpawnCharacterCoreAsync(
+			NewParty[Index],
+			PlayableCharacterClass,
+			Location,
+			Rotation);
+	}
 
-		if (NewCharacter)
+	TArray<FGuid> NewlySpawnedGuids;
+	NewlySpawnedGuids.Reserve(PendingSpawns.Num());
+
+	for (FPendingPartySpawn& Pending : PendingSpawns)
+	{
+		const TRPGAsyncResult<ABaseCharacter*> SpawnResult = co_await Pending.Task;
+
+		if (!SpawnResult.IsSuccess() || !IsValid(SpawnResult.Value))
 		{
-			const FGuid& NewGuid = NewCharacter->GetInstanceId();
-			PartyMemberGuids.Add(NewGuid);
-
-			if (bAsync)
+			for (const FGuid& SpawnedGuid : NewlySpawnedGuids)
 			{
-				PendingPartyInitCount++;
+				DespawnCharacterInstance(SpawnedGuid);
 			}
+
+			bIsSpawningPartyMembers = false;
+			bPartyTeleportDone = false;
+
+			co_return TRPGAsyncResult<>::Failure(
+				TEXT("Party.MemberSpawnFailed"),
+				TEXT("One or more party members failed to spawn."));
 		}
-		else
+
+		const FGuid SpawnedGuid = SpawnResult.Value->GetInstanceId();
+
+		CandidatePartyGuids[Pending.PartyIndex] = SpawnedGuid;
+		NewlySpawnedGuids.Add(SpawnedGuid);
+	}
+
+	for (const FGuid& Guid : CandidatePartyGuids)
+	{
+		if (!Guid.IsValid() || !IsValid(InstanceCharacters.FindRef(Guid)))
 		{
-			UE_LOG(LogCharacterSubsystem, Warning, TEXT("Failed to spawn party member for asset: %s"), *SpawnId.ToString());
+			for (const FGuid& SpawnedGuid : NewlySpawnedGuids)
+			{
+				DespawnCharacterInstance(SpawnedGuid);
+			}
+
+			bIsSpawningPartyMembers = false;
+			bPartyTeleportDone = false;
+
+			co_return TRPGAsyncResult<>::Failure(
+				TEXT("Party.InvalidCandidate"),
+				TEXT("The constructed party contains an invalid character."));
 		}
 	}
 
-	// After all members are spawned, teleport them to the location
-	TeleportPartyMembers(Location, Rotation);
+	// Commit atomically only after every new member is initialized.
+	PartyMemberIds = NewParty;
+	PartyMemberGuids = CandidatePartyGuids;
 
+	if (SpawnPartyMode == ESpawnPartyMode::KeepControlSameCharacter)
+	{
+		const int32 NewPlayerIndex = NewParty.IndexOfByKey(PreviouslyControlledId);
+
+		PlayerPartyIndex =
+			NewPlayerIndex != INDEX_NONE
+			? NewPlayerIndex
+			: 0;
+	}
+	else
+	{
+		PlayerPartyIndex =
+			FMath::Clamp(
+				OldPlayerPartyIndex,
+				0,
+				NewParty.Num() - 1);
+	}
+
+	// Old actors are destroyed only after the new party state has committed.
+	for (const FGuid& OldGuid : OldPartyGuids)
+	{
+		if (OldGuid.IsValid() && !ReusedGuids.Contains(OldGuid))
+		{
+			DespawnCharacterInstance(OldGuid);
+		}
+	}
+
+	TeleportPartyMembers(Location, Rotation);
 	bPartyTeleportDone = true;
-	TryBroadcastPartyReady();
+	bIsSpawningPartyMembers = false;
+
+	PossessParty();
+
+	OnPartyConstructed.Broadcast();
+	OnPartyReady.Broadcast();
+
+	co_return TRPGAsyncResult<>::Success();
+}
+
+void UCharacterSubsystem::DespawnPartyMembers()
+{
+	for (const FGuid& Guid : PartyMemberGuids)
+	{
+		DespawnCharacterInstance(Guid);
+	}
 }
 
 void UCharacterSubsystem::TeleportPartyMembers(const FVector Location, const FRotator Rotation)
@@ -556,13 +830,13 @@ void UCharacterSubsystem::TeleportPartyMembers(const FVector Location, const FRo
 	}
 }
 
-void UCharacterSubsystem::AddPartyMember(const FRPGId Id, const int32 Index)
+void UCharacterSubsystem::AddPartyMember(const FRPGId& Id, const int32 Index)
 {
 	EPartyOperationResult Result;
 	AddPartyMember(Result, Id, Index);
 }
 
-void UCharacterSubsystem::RemovePartyMember(const FRPGId Id)
+void UCharacterSubsystem::RemovePartyMember(const FRPGId& Id)
 {
 	EPartyOperationResult Result;
 	RemovePartyMember(Result, Id);
@@ -574,7 +848,7 @@ void UCharacterSubsystem::RemovePartyMemberByIndex(const int32 Index)
 	RemovePartyMemberByIndex(Result, Index);
 }
 
-void UCharacterSubsystem::AddPartyMember(OUT EPartyOperationResult& Result, const FRPGId Id, const int32 Index)
+void UCharacterSubsystem::AddPartyMember(OUT EPartyOperationResult& Result, const FRPGId& Id, const int32 Index)
 {
 	const auto* Data = CharacterDataMap.Find(Id);
 	if (!Data)
@@ -628,7 +902,7 @@ void UCharacterSubsystem::AddPartyMember(OUT EPartyOperationResult& Result, cons
 	}
 }
 
-void UCharacterSubsystem::RemovePartyMember(OUT EPartyOperationResult& Result, const FRPGId Id)
+void UCharacterSubsystem::RemovePartyMember(OUT EPartyOperationResult& Result, const FRPGId& Id)
 {
 	const auto* Data = CharacterDataMap.Find(Id);
 	if (!Data)
@@ -663,36 +937,68 @@ void UCharacterSubsystem::RemovePartyMemberByIndex(OUT EPartyOperationResult& Re
 	Result = EPartyOperationResult::InvalidOperation;
 }
 
-bool UCharacterSubsystem::IsPartyMember(const FRPGId Id) const
+bool UCharacterSubsystem::IsPartyMember(const FRPGId& Id) const
 {
 	return PartyMemberIds.Contains(Id);
 }
 
-bool UCharacterSubsystem::CanJoinParty(const FRPGId Id) const
+int32 UCharacterSubsystem::GetPartyIndexById(const FRPGId& Id) const
+{
+	return PartyMemberIds.Find(Id);
+}
+
+bool UCharacterSubsystem::CanJoinParty(const FRPGId& Id) const
 {
 	return IsAvailable(Id);
 }
 
-void UCharacterSubsystem::SwitchToNextCharacter(const float DurationOverridden)
+bool UCharacterSubsystem::IsPartyEmpty() const
 {
-	int32 Index = PlayerPartyIndex + 1;
-	if (Index >= PartyMemberGuids.Num())
-	{
-		Index = 0;
-	}
-
-	SwitchPlayerCharacterByIndex(Index, DurationOverridden);
+	return PartyMemberIds.IsEmpty() || !PartyMemberIds.FindByPredicate([](FRPGId Item)
+		{
+			return Item.IsValid();
+		});
 }
 
-void UCharacterSubsystem::SwitchToPreviousCharacter(const float DurationOverridden)
+void UCharacterSubsystem::PossessParty()
 {
-	int32 Index = PlayerPartyIndex - 1;
-	if (Index < 0)
+	if (ARPGPlayerController* PC = Cast<ARPGPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
 	{
-		Index = PartyMemberGuids.Num() - 1;
+		PC->PossessCharacter(GetPartyMemberInstances()[PlayerPartyIndex]);
 	}
+}
 
-	SwitchPlayerCharacterByIndex(Index, DurationOverridden);
+void UCharacterSubsystem::SwitchToCharacter(ESwitchCharacterPolicy SwitchPolicy, float DurationOverridden, bool bCanSwitchToDead)
+{
+	auto GetNextIndex = [](ESwitchCharacterPolicy InSwitchPolicy)
+		{
+			return InSwitchPolicy == ESwitchCharacterPolicy::ToNext ? 1 : -1;
+		};
+
+	int32 Index = PlayerPartyIndex + GetNextIndex(SwitchPolicy);
+
+	while (Index != PlayerPartyIndex)
+	{
+		if (Index >= PartyMemberGuids.Num())
+		{
+			Index = 0;
+		}
+		else if (Index < 0)
+		{
+			Index = PartyMemberGuids.Num() - 1;
+		}
+
+		ABaseCharacter* Current = InstanceCharacters.FindRef(PartyMemberGuids[Index]);
+		check(Current);
+
+		if (bCanSwitchToDead || !(Current->CombatComponent && Current->CombatComponent->IsCharacterDead()))
+		{
+			SwitchPlayerCharacterByIndex(Index, DurationOverridden);
+			return;
+		}
+
+		Index += GetNextIndex(SwitchPolicy);
+	}
 }
 
 void UCharacterSubsystem::SwitchPlayerCharacterByIndex(const int32 Index, const float DurationOverridden)
@@ -704,20 +1010,19 @@ void UCharacterSubsystem::SwitchPlayerCharacterByIndex(const int32 Index, const 
 
 	if (APlayerController* PC = UGameplayStatics::GetPlayerController(GetWorld(), 0))
 	{
-		ABaseCharacter* OldPlayerCharacter = GetPlayerCharacter();
-		ABaseCharacter* NewPlayerCharacter = InstanceCharacters[PartyMemberGuids[Index]];
+		ABaseCharacter* NewPlayerCharacter = InstanceCharacters.FindRef(PartyMemberGuids[Index]);
 
-		if (OldPlayerCharacter && NewPlayerCharacter)
+		if (NewPlayerCharacter)
 		{
-			if (OldPlayerCharacter == NewPlayerCharacter)
+			if (GetPlayerCharacter() == NewPlayerCharacter)
 			{
 				return;
 			}
-			
+
 			// We do not want character to move when switching
 			if (UCharacterControlComponent* ControlComponent = PC->FindComponentByClass<UCharacterControlComponent>())
 			{
-				ControlComponent->DisableMoveContext();
+				ControlComponent->DisableAllInputs();
 			}
 
 			if (ARPGPlayerCameraManager* CamMgr = Cast<ARPGPlayerCameraManager>(PC->PlayerCameraManager))
@@ -726,9 +1031,9 @@ void UCharacterSubsystem::SwitchPlayerCharacterByIndex(const int32 Index, const 
 					NewPlayerCharacter,
 					DurationOverridden >= 0.0f ? DurationOverridden : SwitchCharacterDuration,
 					nullptr,
-					[this, Index, NewPlayerCharacter, OldPlayerCharacter](const FVector& Position, const FRotator& Rotation) {
+					[this, Index, NewPlayerCharacter](const FVector& Position, const FRotator& Rotation) {
 						PlayerPartyIndex = Index;
-						UpdatePossessedCharacter(OldPlayerCharacter, NewPlayerCharacter, Position, Rotation);
+						UpdatePossessedCharacter(NewPlayerCharacter, Position, Rotation);
 					}
 				);
 			}
@@ -741,7 +1046,7 @@ void UCharacterSubsystem::SwitchPlayerCharacterById(const FRPGId& Id, const floa
 	SwitchPlayerCharacterByIndex(PartyMemberIds.IndexOfByKey(Id), DurationOverridden);
 }
 
-void UCharacterSubsystem::UpdatePossessedCharacter(ABaseCharacter* OldCharacter, ABaseCharacter* NewCharacter, const FVector& Position, const FRotator& Rotation)
+void UCharacterSubsystem::UpdatePossessedCharacter(ABaseCharacter* NewCharacter, const FVector& Position, const FRotator& Rotation)
 {
 	if (!NewCharacter)
 	{
@@ -750,7 +1055,15 @@ void UCharacterSubsystem::UpdatePossessedCharacter(ABaseCharacter* OldCharacter,
 
 	if (ARPGPlayerController* PC = Cast<ARPGPlayerController>(UGameplayStatics::GetPlayerController(GetWorld(), 0)))
 	{
-		PC->Possess(NewCharacter);
+		// A camera transition can theoretically complete after another possession
+		// path has already selected this pawn. Avoid a redundant direct Possess;
+		// ARPGPlayerController::PossessCharacter also protects this invariant for
+		// the party-ready path.
+		if (PC->GetPawn() != NewCharacter)
+		{
+			PC->PossessCharacter(NewCharacter);
+		}
+
 		PC->SetControlRotation(Rotation);
 	}
 	else
@@ -769,7 +1082,7 @@ void UCharacterSubsystem::SaveDataTo(FInstancedStruct& SaveData)
 	SaveData.Reset();
 
 	FCharacterSaveModule CharacterSave;
-	
+
 	// Force save all party members' data to map before saving
 	SavePartyMembersDataToMap();
 
@@ -783,55 +1096,56 @@ void UCharacterSubsystem::SaveDataTo(FInstancedStruct& SaveData)
 
 void UCharacterSubsystem::LoadDataFrom(const FInstancedStruct& SaveData)
 {
+	// GameInstanceSubsystem survives map changes and repeated loads. Clear the
+	// previous runtime layer before accepting the new saved data.
+	const uint32 ThisLoadRequest = LoadRequestSerial;
+	TWeakObjectPtr<UCharacterSubsystem> WeakThis(this);
+
 	if (const FCharacterSaveModule* CharacterSave = SaveData.GetPtr<FCharacterSaveModule>())
 	{
 		CharacterDataMap = CharacterSave->CharacterData;
-
 		PlayerPartyIndex = CharacterSave->PlayerPartyIndex;
 		PartyMemberIds = CharacterSave->PartyMembers;
 
-		// Load character data of all party members to map, so that they can be applied to character instances when spawned
-		URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(PartyMemberIds, { "Character", "UI" }, [this](TArray<URPGPrimaryAsset*> Result)
-			{
-				OnLoadComplete().Broadcast();
-			});
+		OnLoadComplete().Broadcast();
+
+		return;
 	}
-	// If the struct type does not match, we treat it as a new game
-	else
+
+	const UCharacterSystemSettings* Settings = GetDefault<UCharacterSystemSettings>();
+	if (!Settings)
 	{
-		const URPGSettings* Settings = URPGSettings::GetRPGSettings();
-		if (!Settings)
-		{
-			return;
-		}
-
-		// If is new game, initialize default party members
-		PartyMemberIds = Settings->DefaultPartyMembers;
-
-		// Initialize player party index
-		PlayerPartyIndex = Settings->DefaultPlayerIndex;
-
-		// Initialize character data map
-		URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(Settings->PlayableCharacters, {}, [this, DefaultParty = Settings->DefaultPartyMembers](TArray<URPGPrimaryAsset*> Result)
-			{
-				for (URPGPrimaryAsset* Asset : Result)
-				{
-					if (UCharacterAsset* CharacterAsset = Cast<UCharacterAsset>(Asset))
-					{
-						CharacterDataMap.Add(Asset->GetId(), CharacterAsset->GetDefaultData());
-					}
-				}
-
-				// Load default party members' data to map, so that they can be applied to character instances when spawned
-				URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(DefaultParty, { "Character", "UI"}, [this](TArray<URPGPrimaryAsset*> Result)
-					{
-						OnLoadComplete().Broadcast();
-					});
-			});
+		OnLoadComplete().Broadcast();
+		return;
 	}
+
+	PartyMemberIds = Settings->DefaultPartyMembers;
+	PlayerPartyIndex = Settings->DefaultPlayerIndex;
+	const TArray<FRPGId> DefaultParty = Settings->DefaultPartyMembers;
+	
+	URPGAssetLibrary::LoadAssetArrayByRPGIdsAsync(Settings->PlayableCharacters, {},
+		[WeakThis, ThisLoadRequest, DefaultParty](TArray<URPGPrimaryAsset*> Result)
+		{
+			UCharacterSubsystem* StrongThis = WeakThis.Get();
+			if (!StrongThis || StrongThis->LoadRequestSerial != ThisLoadRequest)
+			{
+				return;
+			}
+
+			for (URPGPrimaryAsset* Asset : Result)
+			{
+				if (UCharacterAsset* CharacterAsset = Cast<UCharacterAsset>(Asset))
+				{
+					StrongThis->CharacterDataMap.Add(Asset->GetId(), CharacterAsset->GetDefaultData());
+				}
+			}
+
+			StrongThis->OnLoadComplete().Broadcast();
+		});
 }
 
 FSimpleMulticastDelegate& UCharacterSubsystem::OnLoadComplete()
 {
 	return LoadCompleteDelegate;
 }
+

@@ -39,14 +39,9 @@ public:
 
 		TitleColor = FColor::Emerald;
 
-		BindPropertyChangeToNodeInfo(&SNarrativeCutsceneNode::OnNodeInfoPropertyChanged);
-
 		UpdateGraphNode();
 	}
 
-	virtual TSharedRef<SWidget> CreateNarrativeNodeCenterContent() override;
-
-protected:
-	void OnNodeInfoPropertyChanged(const FPropertyChangedChainEvent& PropertyChangedChainEvent) { UpdateGraphNode(); }
+	virtual TSharedRef<SWidget> CreateNodeNodeCenterContent() override;
 
 };

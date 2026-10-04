@@ -10,15 +10,15 @@ TSharedPtr<SGraphNode> UNarrativeStartGraphNode::CreateVisualWidget()
 
 void UNarrativeStartGraphNode::AllocateDefaultPins()
 {
-	CreateNarrativePin(EGPD_Output, TEXT(""));
+	CreateRPGGraphPin(EGPD_Output, TEXT(""));
 }
 
-UEdGraphPin* UNarrativeStartGraphNode::CreateNarrativePin(EEdGraphPinDirection Direction, FName PinName)
+UEdGraphPin* UNarrativeStartGraphNode::CreateRPGGraphPin(EEdGraphPinDirection Direction, FName InPinName)
 {
 	FName Category = TEXT("Output");
 	FName SubCategory = TEXT("StartPin");
 
-	UEdGraphPin* NewPin = CreatePin(Direction, Category, PinName);
+	UEdGraphPin* NewPin = CreatePin(Direction, Category, InPinName);
 	NewPin->PinType.PinSubCategory = SubCategory;
 
 	return NewPin;

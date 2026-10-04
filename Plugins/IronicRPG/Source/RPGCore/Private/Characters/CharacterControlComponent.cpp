@@ -2,7 +2,7 @@
 
 
 #include "Characters/CharacterControlComponent.h"
-#include "Characters/PlayableCharacter.h"
+#include "Characters/BaseCharacter.h"
 #include "Controllers/RPGPlayerController.h"
 #include "Characters/Components/RPGCharacterMovementComponent.h"
 #include "Characters/Components/CharacterAbilitySystemComponent.h"
@@ -69,7 +69,7 @@ void UCharacterControlComponent::UpdateControlledCharacter()
 		return;
 	}
 
-	ControlledCharacter = Cast<APlayableCharacter>(Controller->GetPawn());
+	ControlledCharacter = Cast<ABaseCharacter>(Controller->GetPawn());
 	if (ControlledCharacter)
 	{
 		CharacterMovement = Cast<URPGCharacterMovementComponent>(ControlledCharacter->GetCharacterMovement());
@@ -78,16 +78,6 @@ void UCharacterControlComponent::UpdateControlledCharacter()
 			CharacterMovement->TargetDirection = FVector::ZeroVector;
 		}
 	}
-}
-
-void UCharacterControlComponent::EnableAllInputs()
-{
-	EnableMoveContext();
-}
-
-void UCharacterControlComponent::DisableAllInputs()
-{
-	DisableMoveContext();
 }
 
 void UCharacterControlComponent::Look_Implementation(const FInputActionValue& Value)
@@ -164,11 +154,11 @@ void UCharacterControlComponent::Sprint_Implementation(const FInputActionValue& 
 	CharacterMovement->CharacterSprint();
 }
 
-void UCharacterControlComponent::OnControlledCharacterChanged()
+void UCharacterControlComponent::OnControlledCharacterChanged(const ABaseCharacter* NewCharacter, const ABaseCharacter* OldCharacter)
 {
 	// We need to update the current character of this component first
 	UpdateControlledCharacter();
 
 	// Recover contexts' availability
-	EnableMoveContext();
+	EnableAllInputs();
 }

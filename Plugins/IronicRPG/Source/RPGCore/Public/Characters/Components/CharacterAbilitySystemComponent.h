@@ -7,10 +7,22 @@
 #include "DataTypes/RPGId.h"
 #include "Abilities/AbilityDataTypes.h"
 #include "Engine/StreamableManager.h"
+#include "NativeGameplayTags.h"
 #include "CharacterAbilitySystemComponent.generated.h"
+
+UE_DECLARE_GAMEPLAY_TAG_EXTERN(Ability_Input)
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLearnedAbility, const FAbilityData&, AbilityData);
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnLearnedAbilities, const TArray<FAbilityData>&, LearnedAbilities);
+
+enum class EInputRouteResult : uint8
+{
+	PassThrough,
+	Consumed,
+	Blocked
+};
+
+DECLARE_DELEGATE_RetVal_OneParam(EInputRouteResult, FInputTagListener, const FGameplayTag&);
 
 /**
  * This class extends the UAbilitySystemComponent to provide additional functionality specific to character abilities in the RPG game.
@@ -23,8 +35,12 @@ class RPGCORE_API URPGAbilitySystemComponent : public UAbilitySystemComponent
 public:
 	URPGAbilitySystemComponent(const FObjectInitializer& ObjectInitializer);
 
-	virtual void AbilityLocalInputPressed(int32 InputID) override;
-	virtual void AbilityLocalInputReleased(int32 InputID) override;
+public:
+	UFUNCTION(BlueprintCallable, Category = "Ability|Input")
+	virtual void AbilityInputTagPressed(const FGameplayTag& InputTag);
+
+	UFUNCTION(BlueprintCallable, Category = "Ability|Input")
+	virtual void AbilityInputTagReleased(const FGameplayTag& InputTag);
 
 public:
 	// Returns the owning ABaseCharacter of this Ability System Component
@@ -64,10 +80,10 @@ public:
 	virtual bool TryActivateAbilityById(const FRPGId& AbilityId, bool bAllowRemoteActivation = true);
 
 	UFUNCTION(BlueprintCallable, Category = "Ability")
-	virtual void EquipAbilityById(const FRPGId& AbilityId, int32 InputId);
+	virtual void EquipAbilityById(const FRPGId& AbilityId, UPARAM(meta=(Categories = "Ability.Input")) const FGameplayTag& InputTag);
 
 	UFUNCTION(BlueprintCallable, Category = "Ability")
-	virtual void UnequipAbilityByInputId(int32 InputId);
+	virtual void UnequipAbilityByInputId(UPARAM(meta=(Categories = "Ability.Input")) const FGameplayTag& InputTag);
 
 protected:
 	void OnLearnedAbility(class UAbilityAsset* AbilityAsset, const FAbilityData& AbilityData);
@@ -106,6 +122,27 @@ private:
 	// The abilities that are currently being learned asynchronously
 	TMap<FRPGId, FAbilityLearnRecord> PendingLearnedAbilities;
 
+public:
+	FDelegateHandle RegisterInputTagListener(UObject* Owner, FInputTagListener Listener, int32 Priority = 0);
+
+	void UnregisterInputTagListener(FDelegateHandle Handle);
+
+	EInputRouteResult RouteInputTag(const FGameplayTag& InputTag);
+
+private:
+	struct FInputTagListenerEntry
+	{
+		FDelegateHandle Handle;
+
+		TWeakObjectPtr<UObject> Owner;
+
+		int32 Priority = 0;
+
+		FInputTagListener Listener;
+	};
+
+	TArray<FInputTagListenerEntry> InputTagListeners;
+
 protected:
 	virtual UGameplayAbility* CreateNewInstanceOfAbility(FGameplayAbilitySpec& Spec, const UGameplayAbility* Ability) override;
 
@@ -116,6 +153,6 @@ protected:
 
 	// The map of currently equipped abilities, keyed by their input ID (e.g. 0 for primary action, 1 for secondary action, etc.)
 	UPROPERTY(BlueprintReadOnly, Category = "Ability")
-	TMap<int32, FRPGId> EquippedAbilities;
+	TMap<FGameplayTag, FRPGId> EquippedAbilities;
 
 };

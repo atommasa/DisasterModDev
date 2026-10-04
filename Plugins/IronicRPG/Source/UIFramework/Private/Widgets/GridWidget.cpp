@@ -68,12 +68,13 @@ void UGridWidget::RemoveButton(FIntPoint Coord)
         }
     }
 
-    // If the removed button was the current focus button, reset the focus to the default button
-    if (CurrentFocusCoord == Coord)
-    {
-        CurrentFocusCoord = DefaultFocusCoord;
-        SetNavigationFocus(CurrentFocusCoord);
-    }
+    const bool bRemovedFocusedButton = (CurrentFocusCoord == Coord);
 
     RebuildNavigation();
+
+    // The graph has changed; restore a valid default focus only after rebuilding it.
+    if (bRemovedFocusedButton)
+    {
+        ResetNavigationFocus();
+    }
 }

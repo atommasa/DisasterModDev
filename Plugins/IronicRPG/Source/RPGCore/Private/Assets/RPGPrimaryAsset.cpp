@@ -16,9 +16,33 @@ void URPGPrimaryAsset::GetAssetRegistryTags(FAssetRegistryTagsContext Context) c
 }
 
 #if WITH_EDITOR
+void URPGPrimaryAsset::PostDuplicate(const EDuplicateMode::Type DuplicateMode)
+{
+	Super::PostDuplicate(DuplicateMode);
+
+	if (DuplicateMode != EDuplicateMode::Normal || HasAnyFlags(RF_ClassDefaultObject | RF_ArchetypeObject))
+	{
+		return;
+	}
+
+	// A normal duplicate is a new authored owner. PIE duplicates keep the runtime identity copied from their source.
+	Id = {};
+	if (UAssetManager::IsInitialized() && IsAsset() && !IsTemplate())
+	{
+		UAssetManager::Get().RefreshAssetData(this);
+	}
+	MarkPackageDirty();
+}
+
 void URPGPrimaryAsset::PostEditChangeProperty(FPropertyChangedEvent& PropertyChangedEvent)
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
+
+	// UObject's Undo/Redo path also reaches this hook. Keep identity lookup in sync before notifying consumers.
+	if (UAssetManager::IsInitialized() && IsAsset() && !IsTemplate())
+	{
+		UAssetManager::Get().RefreshAssetData(this);
+	}
 
 	OnRPGAssetModified.Broadcast(Id);
 }
@@ -137,7 +161,7 @@ void URPGPrimaryAsset::AddStructSoftObjectToBundle(FName BundleName, const void*
 
 			if (!SoftObj.IsNull())
 			{
-				AssetBundleData.AddBundleAsset(BundleName, SoftObj.ToSoftObjectPath());
+				AssetBundleData.AddBundleAssetTruncated(BundleName, SoftObj.ToSoftObjectPath());
 			}
 		}
 	}

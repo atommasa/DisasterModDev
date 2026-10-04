@@ -9,9 +9,9 @@ FText FSpeakerData::GetSpeakerDisplayName() const
 {
 	if (SpeakerSource == ESpeakerSource::CharacterId)
 	{
-		if (UCharacterAsset* CharacterAsset = Cast<UCharacterAsset>(URPGAssetLibrary::GetAssetByRPGId(SpeakerId)))
+		if (UCharacterAsset* CharacterAsset = Cast<UCharacterAsset>(URPGAssetLibrary::LoadAssetByRPGId(SpeakerId)))
 		{
-			return CharacterAsset->GetDisplayName().DefaultName;
+			return CharacterAsset->GetDisplayName();
 		}
 	}
 	else

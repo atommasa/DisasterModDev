@@ -8,6 +8,34 @@
 #include "GameZoneContext.generated.h"
 
 /**
+ * The helper struct to identify the entry in game zones.
+ */
+USTRUCT(BlueprintType)
+struct RPGCORE_API FGameZoneEntryId
+{
+	GENERATED_BODY()
+
+public:
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
+	FGuid EntryGuid;
+
+	FGameZoneEntryId& operator=(FGuid& NewGuid) noexcept
+	{
+		EntryGuid = NewGuid;
+		return *this;
+	}
+
+	FGameZoneEntryId& operator=(const FGuid& NewGuid) noexcept
+	{
+		EntryGuid = NewGuid;
+		return *this;
+	}
+
+	bool IsValid() const { return EntryGuid.IsValid(); }
+
+};
+
+/**
  * This structure defines the context of a game zone, including the zone ID, sub-zone ID, and the player's location and rotation within that zone.
  * It is used to set warping points to specific locations in the game world.
  * Also used to save the player's current location and rotation when saving the game state.
@@ -21,39 +49,32 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta=(IdType = "Zone", DisplayName = "ZoneId"))
 	FRPGId ZoneId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta=(IdType = "SubZone", DisplayName = "SubZoneId"))
-	TArray<FRPGId> SubZoneIds;
-
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame)
 	bool bUseSavedTransform = false;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta=(EditCondition = "!bUseSavedTransform", Categories = "EntryPoint"))
-	FGameplayTag EntryTag;
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta=(SourceWorld = "ZoneId", EditCondition = "!bUseSavedTransform"))
+	FGameZoneEntryId EntryId;
 
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta = (EditCondition = "bUseSavedTransform"))
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, SaveGame, meta=(EditCondition = "bUseSavedTransform"))
 	FTransform SavedTransform;
 
 	FGameZoneContext() = default;
 
 	FGameZoneContext(
 		const FRPGId& InZoneId,
-		const TArray<FRPGId>& InSubZoneIds,
-		const FGameplayTag& InEntryTag
+		const FGuid& InEntryId
 	)
 		: ZoneId(InZoneId)
-		, SubZoneIds(InSubZoneIds)
 		, bUseSavedTransform(false)
-		, EntryTag(InEntryTag)
+		, EntryId(InEntryId)
 	{
 	}
 
 	FGameZoneContext(
 		const FRPGId& InZoneId,
-		const TArray<FRPGId>& InSubZoneIds,
 		const FTransform& InSavedTransform
 	)
 		: ZoneId(InZoneId)
-		, SubZoneIds(InSubZoneIds)
 		, bUseSavedTransform(true)
 		, SavedTransform(InSavedTransform)
 	{

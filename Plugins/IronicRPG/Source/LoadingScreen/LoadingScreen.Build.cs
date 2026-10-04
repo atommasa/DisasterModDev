@@ -41,6 +41,7 @@ public class LoadingScreen : ModuleRules
 				"Engine",
 				"Slate",
 				"SlateCore",
+				"UIFramework",
 				// ... add private dependencies that you statically link with here ...	
 			}
 			);

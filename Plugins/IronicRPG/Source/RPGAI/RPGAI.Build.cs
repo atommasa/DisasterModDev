@@ -30,6 +30,7 @@ public class RPGAI : ModuleRules
                 "AIModule",
 				"GameplayTasks",
                 "NavigationSystem",
+				"CharacterSystem",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

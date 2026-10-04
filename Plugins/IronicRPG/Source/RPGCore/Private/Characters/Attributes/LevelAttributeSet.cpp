@@ -28,17 +28,6 @@ void ULevelAttributeSet::BindAttributeChangedDelegates(UAbilitySystemComponent* 
 	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, ULevelAttributeSet, ExpToNextLevel);
 }
 
-TSet<FGameplayAttribute> ULevelAttributeSet::GetSaveableAttributes() const
-{
-    static const TSet<FGameplayAttribute> SaveableAttributes = {
-        GetLevelAttribute(),
-        GetCurrentExpAttribute(),
-        GetExpToNextLevelAttribute()
-	};
-
-	return SaveableAttributes;
-}
-
 const FGameplayAttribute ULevelAttributeSet::GetMaxClampAttribute(const FGameplayAttribute& Attribute) const
 {
     if (Attribute == GetCurrentExpAttribute())

@@ -1,4 +1,4 @@
-// Copyright Ironic Studio. All Rights Reserved.
+﻿// Copyright Ironic Studio. All Rights Reserved.
 
 #pragma once
 
@@ -38,6 +38,7 @@ public:
 protected:
 	// Called when the game starts or when spawned
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 	virtual void PostInitializeComponents() override;
 
@@ -84,11 +85,30 @@ public: // Animation
 	virtual void GetCharacterAnimEntry(FCharacterAnimInput& InputStruct, FCharacterAnimEntry& OutEntry) const;
 
 protected: // Animation
-	void RecursivePreloadAnimData(const FInstancedStruct& ResultsStruct, TArray<TSharedPtr<FStreamableHandle>>& OutHandles, TFunction<void()> Callback) const;
+	struct FAnimPreloadRequestState
+	{
+		int32 Generation = 0;
+		int32 PendingCount = 0;
 
-	TArray<TSharedPtr<FStreamableHandle>> PreloadedAnimHandles;
+		bool bEnumerationFinished = false;
+		bool bFinished = false;
+		bool bCanceled = false;
 
-	mutable int32 PreloadedAnimDataCount = 0;
+		TArray<TSharedPtr<FStreamableHandle>> Handles;
+		TFunction<void()> CompletionCallback;
+	};
+
+	void RecursivePreloadAnimData(
+		const FInstancedStruct& ResultsStruct,
+		const TSharedRef<FAnimPreloadRequestState, ESPMode::ThreadSafe>& RequestState);
+
+	void TryFinishAnimPreload(
+		const TSharedRef<FAnimPreloadRequestState, ESPMode::ThreadSafe>& RequestState);
+
+	void CancelActiveAnimPreload();
+
+	TSharedPtr<FAnimPreloadRequestState, ESPMode::ThreadSafe> ActiveAnimPreloadRequest;
+	int32 AnimPreloadGeneration = 0;
 
 public: // AI Control
 	UFUNCTION(BlueprintCallable, Category = "AI|Control")

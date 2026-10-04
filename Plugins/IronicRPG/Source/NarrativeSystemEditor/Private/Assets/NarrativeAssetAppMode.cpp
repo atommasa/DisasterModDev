@@ -8,7 +8,7 @@
 #include "Assets/EventGraphTabFactory.h"
 
 const FName FNarrativeAssetAppModes::NarrativeDefaultMode(TEXT("DefaultsName"));
-const FName FNarrativeAssetAppModes::NarrativeEventGraphMode(TEXT("EventGraphName"));
+const FName FNarrativeAssetAppModes::NarrativeEventGraphMode(TEXT("DialogueEventGraphName"));
 
 NarrativeAssetAppMode::NarrativeAssetAppMode(TSharedPtr<class NarrativeAssetEditorApp> App)
 	: FBlueprintEditorApplicationMode(App, FNarrativeAssetAppModes::NarrativeDefaultMode, &FNarrativeAssetAppModes::GetLocalizedMode, true, true)
@@ -44,7 +44,7 @@ void NarrativeAssetAppMode::RegisterTabFactories(TSharedPtr<class FTabManager> I
 {
 	TSharedPtr<NarrativeAssetEditorApp> App = _App.Pin();
 	App->PushTabFactories(BlueprintEditorTabFactories);
-	FApplicationMode::RegisterTabFactories(InTabManager);
+	FApplicationMode::RegisterTabFactoriesWithAppAndManager(App.Get(), InTabManager.ToSharedRef());
 }
 
 void NarrativeAssetAppMode::PreDeactivateMode()

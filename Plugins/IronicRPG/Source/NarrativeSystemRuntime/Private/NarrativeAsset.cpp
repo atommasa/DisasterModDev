@@ -4,6 +4,9 @@
 #include "NarrativeAsset.h"
 #include "UObject/ObjectSaveContext.h"
 
+FName UDialogueBlueprint::DialogueGraphName(TEXT("DialogueGraph"));
+FName UDialogueBlueprint::DialogueEventGraphName(TEXT("DialogueEventGraph"));
+
 void UNarrativeBlueprintBase::PreSave(FObjectPreSaveContext SaveContext)
 {
 	if (_OnPreSaveListener)

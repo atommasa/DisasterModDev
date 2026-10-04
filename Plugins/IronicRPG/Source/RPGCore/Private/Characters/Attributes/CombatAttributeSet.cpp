@@ -114,23 +114,6 @@ void UCombatAttributeSet::BindAttributeChangedDelegates(UAbilitySystemComponent*
     BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, UCombatAttributeSet, Shield);
 }
 
-TSet<FGameplayAttribute> UCombatAttributeSet::GetSaveableAttributes() const
-{
-    static const TSet<FGameplayAttribute> SaveableAttributes = {
-        GetHealthAttribute(),
-        GetMaxHealthAttribute(),
-        GetSpiritEnergyAttribute(),
-        GetMaxSpiritEnergyAttribute(),
-        GetAttackAttribute(),
-        GetDefenseAttribute(),
-        GetCriticalRateAttribute(),
-        GetCriticalDamageAttribute(),
-        GetCriticalResistanceAttribute()
-	};
-
-	return SaveableAttributes;
-}
-
 const FGameplayAttribute UCombatAttributeSet::GetMaxClampAttribute(const FGameplayAttribute& Attribute) const
 {
     if (Attribute == GetHealthAttribute())

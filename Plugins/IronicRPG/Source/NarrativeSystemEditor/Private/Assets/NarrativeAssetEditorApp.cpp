@@ -162,8 +162,8 @@ void NarrativeAssetEditorApp::InitBlueprintEditor(const EToolkitMode::Type Mode,
     CreateGraphEditorCommands();
 
     // TODO: 未來考慮更實際的判斷邏輯
-    const FName& DialogueGraphName = FName(TEXT("DialogueGraph"));
-    const FName& EventGraphName = FName(TEXT("DialogueEventGraph"));
+    const FName& DialogueGraphName = UDialogueBlueprint::DialogueGraphName;
+    const FName& DialogueEventGraphName = UDialogueBlueprint::DialogueEventGraphName;
 
     TArray<UEdGraph*> Graphs;
     _WorkingAsset->GetAllGraphs(Graphs);
@@ -176,7 +176,7 @@ void NarrativeAssetEditorApp::InitBlueprintEditor(const EToolkitMode::Type Mode,
 
         const bool bIsNarrativeGraph = Graph->GetSchema() && Graph->GetSchema()->IsA<UNarrativeGraphSchema>();
 
-        const bool bIsKnownNarrativeGraph = Graph->GetFName() == DialogueGraphName || Graph->GetFName() == EventGraphName;
+        const bool bIsKnownNarrativeGraph = Graph->GetFName() == DialogueGraphName || Graph->GetFName() == DialogueEventGraphName;
 
         if (bIsNarrativeGraph && !bIsKnownNarrativeGraph)
         {
@@ -256,7 +256,7 @@ void NarrativeAssetEditorApp::OnGraphSelectionChanged(const FGraphPanelSelection
     UNarrativeGraphNodeBase* SelectedNode = GetSelectedNode(Selection);
     if (SelectedNode)
     {
-        UNarrativeNodeInfo* NodeInfo = SelectedNode->GetNodeInfo();
+        UNarrativeNodeInfo* NodeInfo = SelectedNode->GetNarrativeNodeInfo();
         if (!NodeInfo)
         {
             return;
@@ -312,9 +312,9 @@ void NarrativeAssetEditorApp::OnFinishedChangingProperties(const FPropertyChange
         {
             PlayerOptionsNode->Modify();
             
-            if (PlayerOptionsNode->GetNodeInfo())
+            if (PlayerOptionsNode->GetNarrativeNodeInfo())
             {
-                PlayerOptionsNode->GetNodeInfo()->Modify();
+                PlayerOptionsNode->GetNarrativeNodeInfo()->Modify();
             }
 
             PlayerOptionsNode->SyncPin();
@@ -355,9 +355,9 @@ void NarrativeAssetEditorApp::OnClose()
 //        {
 //            PlayerOptionsNode->Modify();
 //
-//            if (PlayerOptionsNode->GetNodeInfo())
+//            if (PlayerOptionsNode->GetNarrativeNodeInfo())
 //            {
-//                PlayerOptionsNode->GetNodeInfo()->Modify();
+//                PlayerOptionsNode->GetNarrativeNodeInfo()->Modify();
 //            }
 //
 //            PlayerOptionsNode->SyncPin();
@@ -678,13 +678,13 @@ void NarrativeAssetEditorApp::PasteDialogueTextAsNodes(UEdGraph* Graph, const FS
 
 		// Create Node Info
         auto* NodeInfo = NewObject<UNarrativeDialogueNodeInfo>(DialogueGraphNode);
-        NodeInfo->Dialogue = FText::FromString(DialogueLine.Dialogue);
+        NodeInfo->DialogueLine.DialogueText = FText::FromString(DialogueLine.Dialogue);
 		NodeInfo->SpeakerName = FText::FromString(DialogueLine.Speaker);
 
-        DialogueGraphNode->SetNodeInfo(NodeInfo);
+        DialogueGraphNode->SetNodeInfoObject(NodeInfo);
 
-        DialogueGraphNode->CreateNarrativePin(EGPD_Input, TEXT("In"));
-        DialogueGraphNode->CreateNarrativePin(EGPD_Output, TEXT("Out"));
+        DialogueGraphNode->CreateRPGGraphPin(EGPD_Input, TEXT("In"));
+        DialogueGraphNode->CreateRPGGraphPin(EGPD_Output, TEXT("Out"));
 
         Graph->Modify();
         Graph->AddNode(DialogueGraphNode, true, true);
@@ -876,10 +876,8 @@ void NarrativeAssetEditorApp::UpdateWorkingAssetFromGraph()
 
         UNarrativeRuntimeNode* RuntimeNode = NewObject<UNarrativeRuntimeNode>(RuntimeGraph);
         RuntimeNode->Position = FVector2D(UINarrativeNode->NodePosX, UINarrativeNode->NodePosY);
-
-        RuntimeNode->NodeType = UINarrativeNode->GetNarrativeNodeType();
         
-        if (UNarrativeNodeInfo* SourceInfo = UINarrativeNode->GetNodeInfo())
+        if (UNarrativeNodeInfo* SourceInfo = UINarrativeNode->GetNarrativeNodeInfo())
         {
             RuntimeNode->NodeInfo = DuplicateObject<UNarrativeNodeInfo>(SourceInfo, RuntimeNode);
         }
@@ -927,98 +925,98 @@ void NarrativeAssetEditorApp::UpdateWorkingAssetFromGraph()
     }
 }
 
-void NarrativeAssetEditorApp::RebuildEditorGraphFromRuntimeGraph()
-{
-    if (!_WorkingAsset->Graph)
-    {
-		
-        return;
-    }
-
-    TArray<UClass*> NodeClasses;
-    GetDerivedClasses(UNarrativeGraphNodeBase::StaticClass(), NodeClasses);
-
-    // Create all the nodes/pins first
-    TArray<std::pair<FGuid, FGuid>> Connections;
-    TMap<FGuid, UEdGraphPin*> IDToPinMap;
-    for (UNarrativeRuntimeNode* RuntimeNode : _WorkingAsset->Graph->Nodes)
-    {
-        UNarrativeGraphNodeBase* NewNode = nullptr;
-
-        for (UClass* NodeClass : NodeClasses)
-        {
-            UNarrativeGraphNodeBase* CDONode = NodeClass->GetDefaultObject<UNarrativeGraphNodeBase>();
-            if (CDONode && CDONode->GetNarrativeNodeType() == RuntimeNode->NodeType)
-            {
-                NewNode = NewObject<UNarrativeGraphNodeBase>(
-                    _WorkingGraph,
-                    NodeClass,
-                    NAME_None,
-                    RF_Transactional
-                );
-
-                break;
-            }
-        }
-
-        if (!NewNode)
-        {
-            continue;
-        }
-
-        NewNode->NodeGuid = RuntimeNode->NodeGuid;
-        NewNode->NodePosX = RuntimeNode->Position.X;
-        NewNode->NodePosY = RuntimeNode->Position.Y;
-
-		if (RuntimeNode->NodeInfo)
-		{
-            NewNode->SetNodeInfo(DuplicateObject(RuntimeNode->NodeInfo, NewNode));
-		}
-		else if (RuntimeNode->NodeType != ENarrativeNodeType::StartNode)
-		{
-			NewNode->SetNodeInfo(NewObject<UNarrativeNodeInfo>(RuntimeNode));
-		}
-
-        if (RuntimeNode->InputPin)
-        {
-            UNarrativeRuntimePin* Pin = RuntimeNode->InputPin;
-            UEdGraphPin* UiPin = NewNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, Pin->PinName);
-            UiPin->PinId = Pin->PinId;
-
-            if (Pin->Connection)
-            {
-                Connections.Add(std::make_pair(Pin->PinId, Pin->Connection->PinId));
-            }
-            IDToPinMap.Add(Pin->PinId, UiPin);
-        }
-
-        for (UNarrativeRuntimePin* Pin : RuntimeNode->OutputPins)
-        {
-            UEdGraphPin* UIPin = NewNode->CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, Pin->PinName);
-            UIPin->PinId = Pin->PinId;
-
-            if (Pin->Connection)
-            {
-                Connections.Add(std::make_pair(Pin->PinId, Pin->Connection->PinId));
-            }
-
-            IDToPinMap.Add(Pin->PinId, UIPin);
-        }
-
-        _WorkingGraph->AddNode(NewNode, true, true);
-    }
-
-    for (std::pair<FGuid, FGuid> Connection : Connections)
-    {
-        UEdGraphPin* FromPin = IDToPinMap.FindRef(Connection.first);
-        UEdGraphPin* ToPin = IDToPinMap.FindRef(Connection.second);
-        if (FromPin && ToPin)
-        {
-            FromPin->LinkedTo.Add(ToPin);
-            ToPin->LinkedTo.Add(FromPin);
-        }
-    }
-}
+//void NarrativeAssetEditorApp::RebuildEditorGraphFromRuntimeGraph()
+//{
+//    if (!_WorkingAsset->Graph)
+//    {
+//		
+//        return;
+//    }
+//
+//    TArray<UClass*> NodeClasses;
+//    GetDerivedClasses(UNarrativeGraphNodeBase::StaticClass(), NodeClasses);
+//
+//    // Create all the nodes/pins first
+//    TArray<std::pair<FGuid, FGuid>> Connections;
+//    TMap<FGuid, UEdGraphPin*> IDToPinMap;
+//    for (UNarrativeRuntimeNode* RuntimeNode : _WorkingAsset->Graph->Nodes)
+//    {
+//        UNarrativeGraphNodeBase* NewNode = nullptr;
+//
+//        for (UClass* NodeClass : NodeClasses)
+//        {
+//            UNarrativeGraphNodeBase* CDONode = NodeClass->GetDefaultObject<UNarrativeGraphNodeBase>();
+//            if (CDONode && CDONode->GetNarrativeNodeType() == RuntimeNode->NodeType)
+//            {
+//                NewNode = NewObject<UNarrativeGraphNodeBase>(
+//                    _WorkingGraph,
+//                    NodeClass,
+//                    NAME_None,
+//                    RF_Transactional
+//                );
+//
+//                break;
+//            }
+//        }
+//
+//        if (!NewNode)
+//        {
+//            continue;
+//        }
+//
+//        NewNode->NodeGuid = RuntimeNode->NodeGuid;
+//        NewNode->NodePosX = RuntimeNode->Position.X;
+//        NewNode->NodePosY = RuntimeNode->Position.Y;
+//
+//		if (RuntimeNode->NodeInfo)
+//		{
+//            NewNode->SetNodeInfoObject(DuplicateObject(RuntimeNode->NodeInfo, NewNode));
+//		}
+//		else if (RuntimeNode->NodeType != ENarrativeNodeType::StartNode)
+//		{
+//			NewNode->SetNodeInfoObject(NewObject<UNarrativeNodeInfo>(RuntimeNode));
+//		}
+//
+//        if (RuntimeNode->InputPin)
+//        {
+//            UNarrativeRuntimePin* Pin = RuntimeNode->InputPin;
+//            UEdGraphPin* UiPin = NewNode->CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Input, Pin->PinName);
+//            UiPin->PinId = Pin->PinId;
+//
+//            if (Pin->Connection)
+//            {
+//                Connections.Add(std::make_pair(Pin->PinId, Pin->Connection->PinId));
+//            }
+//            IDToPinMap.Add(Pin->PinId, UiPin);
+//        }
+//
+//        for (UNarrativeRuntimePin* Pin : RuntimeNode->OutputPins)
+//        {
+//            UEdGraphPin* UIPin = NewNode->CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Output, Pin->PinName);
+//            UIPin->PinId = Pin->PinId;
+//
+//            if (Pin->Connection)
+//            {
+//                Connections.Add(std::make_pair(Pin->PinId, Pin->Connection->PinId));
+//            }
+//
+//            IDToPinMap.Add(Pin->PinId, UIPin);
+//        }
+//
+//        _WorkingGraph->AddNode(NewNode, true, true);
+//    }
+//
+//    for (std::pair<FGuid, FGuid> Connection : Connections)
+//    {
+//        UEdGraphPin* FromPin = IDToPinMap.FindRef(Connection.first);
+//        UEdGraphPin* ToPin = IDToPinMap.FindRef(Connection.second);
+//        if (FromPin && ToPin)
+//        {
+//            FromPin->LinkedTo.Add(ToPin);
+//            ToPin->LinkedTo.Add(FromPin);
+//        }
+//    }
+//}
 
 UNarrativeGraphNodeBase* NarrativeAssetEditorApp::GetSelectedNode(const FGraphPanelSelectionSet& Selection)
 {

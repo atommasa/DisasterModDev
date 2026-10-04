@@ -3,7 +3,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/GameInstanceSubsystem.h"
+#include "Subsystems/RPGGameInstanceSubsystem.h"
 #include "SaveGame/RPGSaveGameMacros.h"
 #include "SaveGame/RPGSaveGame.h"
 #include "SaveGame/MetaDataSaveGame.h"
@@ -13,13 +13,14 @@
 DECLARE_LOG_CATEGORY_EXTERN(LogSaveSystem, Log, All);
 
 DECLARE_MULTICAST_DELEGATE(FOnSaveGameLoadCompleted);
+DECLARE_MULTICAST_DELEGATE_OneParam(FOnSaveGameLoadFailed, const FString&);
 
 /**
  * USaveSubsystem is a subsystem for managing game saves.
  * It provides functionality to save, load, delete, and check the existence of game saves.
  */
-UCLASS(Abstract, Blueprintable)
-class SAVESYSTEM_API USaveGameSubsystem : public UGameInstanceSubsystem
+UCLASS(Blueprintable)
+class SAVESYSTEM_API USaveGameSubsystem : public URPGGameInstanceSubsystem
 {
 	GENERATED_BODY()
 
@@ -40,6 +41,11 @@ public:
 	// The index is 1-based. If SlotIndex is 0 it will be treated as an auto-save.
 	UFUNCTION(BlueprintCallable, Category = "Save System")
 	void SaveGameByIndex(int32 SlotIndex, bool bAsync = true);
+
+	// Load game by index, using the prefix from settings.
+	// The index is 1-based. If SlotIndex is 0 it will be treated as an auto-save.
+	UFUNCTION(BlueprintCallable, Category = "Save System")
+	void LoadGameByIndex(int32 SlotIndex, bool bAsync = true);
 
 	// Deletes the save data from the specified slot.
 	UFUNCTION(BlueprintCallable, Category = "Save System")
@@ -68,10 +74,23 @@ public:
 	UFUNCTION(BlueprintCallable, Category = "Save System")
 	TArray<FInstancedStruct> GetSaveSlotsMetaData() const;
 
+	UFUNCTION(BlueprintCallable, Category = "Save System")
+	FInstancedStruct GetAutoSaveSlotMetaData() const;
+
 public:
 	FOnSaveGameLoadCompleted OnSaveGameLoadCompleted;
+	FOnSaveGameLoadFailed OnSaveGameLoadFailed;
 
 	TSet<ISaveable*> PendingSubsystems;
+
+private:
+	void ClearLoadTracking();
+	void HandleSubsystemLoadCompleted(ISaveable* Provider, uint32 LoadRequestId);
+
+	// Every LoadGame invocation owns a unique request id. Provider callbacks from an
+	// older request must never be allowed to complete the current request.
+	uint32 ActiveLoadRequestId = 0;
+	TMap<ISaveable*, FDelegateHandle> LoadCompleteHandles;
     
 protected:
 	UFUNCTION()

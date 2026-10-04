@@ -27,12 +27,3 @@ void USocialAttributeSet::BindAttributeChangedDelegates(UAbilitySystemComponent*
 
 	BIND_ATTRIBUTE_CHANGE_DELEGATE(AbilitySystemComponent, USocialAttributeSet, Favorability);
 }
-
-TSet<FGameplayAttribute> USocialAttributeSet::GetSaveableAttributes() const
-{
-    static const TSet<FGameplayAttribute> SaveableAttributes = {
-        GetFavorabilityAttribute()
-    };
-
-	return SaveableAttributes;
-}

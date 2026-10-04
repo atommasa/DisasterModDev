@@ -17,10 +17,9 @@
  * @param PropType      The data type of this property
  * @param PropName      The name of this property
  */
-#define ASSET_PROP_GETTER(PropType, PropName)                                               \
-public:                                                                                      \
-    PropType Get##PropName() const { return PropName; }                                      \
-	static const FName GetPropertyName_##PropName() { return #PropName; }                    \
+#define ASSET_PROP_GETTER(PropType, PropName) \
+public: \
+    PropType Get##PropName() const { return PropName; } \
 protected:
 
 /**

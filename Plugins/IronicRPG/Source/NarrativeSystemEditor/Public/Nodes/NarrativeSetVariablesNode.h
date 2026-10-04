@@ -19,9 +19,6 @@ public: // UEdGraphNode interface
 	virtual TSharedPtr<SGraphNode> CreateVisualWidget() override;
 	virtual void AllocateDefaultPins() override;
 
-public: // UNarrativeGraphNodeBase interface
-	virtual ENarrativeNodeType GetNarrativeNodeType() const override { return ENarrativeNodeType::SetVariablesNode; }
-
 };
 
 class SNarrativeSetVariablesNode : public SNarrativeGraphNodeBase
@@ -37,17 +34,13 @@ public:
 
 		TitleColor = FColor(26, 105, 156);
 
-		BindPropertyChangeToNodeInfo(&SNarrativeSetVariablesNode::OnNodeInfoPropertyChanged);
-
 		UpdateGraphNode();
 	}
 
-	virtual TSharedRef<SWidget> CreateNarrativeNodeCenterContent() override;
+	virtual TSharedRef<SWidget> CreateNodeNodeCenterContent() override;
 	virtual void UpdateVariablesListContainer();
 
 protected:
-	void OnNodeInfoPropertyChanged(const FPropertyChangedChainEvent& PropertyChangedChainEvent) { UpdateGraphNode(); }
-
 	TSharedPtr<SVerticalBox> VariablesListContainer;
 
 };

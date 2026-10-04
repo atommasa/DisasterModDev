@@ -46,9 +46,34 @@ void URPGAttributeSet::MaxValueChanged(const FGameplayAttribute& CurrentAttribut
     );
 }
 
+void URPGAttributeSet::GetSaveableAttributes(TSet<FGameplayAttribute>& OutSet) const
+{
+    OutSet.Reset();
+
+    for (TFieldIterator<FProperty> PropIt(GetClass(), EFieldIteratorFlags::IncludeSuper); PropIt; ++PropIt)
+    {
+        FProperty* Property = *PropIt;
+
+        if (!Property->HasAnyPropertyFlags(CPF_SaveGame))
+        {
+            continue;
+        }
+
+        if (!FGameplayAttribute::IsGameplayAttributeDataProperty(Property))
+        {
+            continue;
+        }
+
+        OutSet.Add(FGameplayAttribute(Property));
+    }
+}
+
 void URPGAttributeSet::SaveAttributesTo(FCharacterSaveData& OutSaveData) const
 {
-    for (const FGameplayAttribute& Attribute : GetSaveableAttributes())
+    TSet<FGameplayAttribute> Saveables;
+    GetSaveableAttributes(Saveables);
+
+    for (const FGameplayAttribute& Attribute : Saveables)
     {
         OutSaveData.Attributes.Add(Attribute, Attribute.GetNumericValue(this));
     }
@@ -58,7 +83,10 @@ void URPGAttributeSet::LoadAttributesFrom(const FCharacterSaveData& InSaveData)
 {
     bIsInitializing = true;
 
-    for (const FGameplayAttribute& Attribute : GetSaveableAttributes())
+    TSet<FGameplayAttribute> Saveables;
+    GetSaveableAttributes(Saveables);
+
+    for (const FGameplayAttribute& Attribute : Saveables)
     {
         if (!Attribute.IsValid())
         {

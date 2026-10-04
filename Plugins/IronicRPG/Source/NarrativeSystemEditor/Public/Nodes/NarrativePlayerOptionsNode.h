@@ -23,13 +23,15 @@ public: // UEdGraphNode interface
 	virtual void AllocateDefaultPins() override;
 
 public: // UNarrativeGraphNodeBase interface
-	virtual ENarrativeNodeType GetNarrativeNodeType() const override { return ENarrativeNodeType::PlayerOptionsNode; }
 	virtual void SyncPin() override;
-	virtual ECallableBindingType GetCallableBindingType() const override { return ECallableBindingType::CBT_Event; }
+	
+	virtual ECallableBindingType GetCallableBindingType() const override { return ECallableBindingType::CBT_Function; }
+	virtual bool CanCreateCallableBinding() const override { return true; }
+	virtual UFunction* GetFunctionAsSignature() const override;
 
 private: // UNarrativeGraphNodeBase interface
+	virtual FName CreateCallableBindingName() const override;
 	virtual FText CreateCallableBindingComment() const override;
-	virtual void CreateCallableBindingParameterPins(UK2Node_EditablePinBase* InNode) override;
 
 public:
 	void AddOption();
@@ -52,6 +54,6 @@ public:
 		UpdateGraphNode();
 	}
 
-	virtual TSharedRef<SWidget> CreateNarrativeNodeCenterContent() override;
+	virtual TSharedRef<SWidget> CreateNodeNodeCenterContent() override;
 
 };

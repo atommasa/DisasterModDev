@@ -33,7 +33,7 @@ private:
 
 private:
 	TSharedPtr<IPropertyHandle> Handler = nullptr;
-	TSharedPtr<class SObjectPropertyEntryBox> PropertyEntryBox = nullptr;
+	TSharedPtr<class SRPGIdAssetPicker> PropertyEntryBox = nullptr;
 
 	FName LimitedType = NAME_None;
 };

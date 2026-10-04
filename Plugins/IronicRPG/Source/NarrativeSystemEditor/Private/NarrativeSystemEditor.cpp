@@ -16,13 +16,15 @@
 #include "AssetRegistry/AssetRegistryModule.h"
 #include "Narrative/Dialogue.h"
 #include "Nodes/NarrativeNodeKnot.h"
+#include "Nodes/RPGGraphNodeBase.h"
+#include "Nodes/RPGGraphNodeKnot.h"
 
 #define LOCTEXT_NAMESPACE "FNarrativeSystemEditorModule"
 
 /*
 * This class is used to create a custom pin type for the Narrative System.
 */
-class SNarrativeGraphPin : public SNarrativeGraphPinBase
+class SNarrativeGraphPin : public SRPGGraphPinBase
 {
 public:
 	SLATE_BEGIN_ARGS(SNarrativeGraphPin) {}
@@ -30,7 +32,7 @@ public:
 
 	void Construct(const FArguments& InArgs, UEdGraphPin* InPin)
 	{
-		SNarrativeGraphPinBase::Construct(SNarrativeGraphPinBase::FArguments(), InPin);
+		SRPGGraphPinBase::Construct(SRPGGraphPinBase::FArguments(), InPin);
 	}
 
 protected:
@@ -40,7 +42,7 @@ protected:
 	}
 };
 
-class SNarrativeStartGraphPin : public SNarrativeGraphPinBase
+class SNarrativeStartGraphPin : public SRPGGraphPinBase
 {
 public:
 	SLATE_BEGIN_ARGS(SNarrativeStartGraphPin) {}
@@ -48,7 +50,7 @@ public:
 
 	void Construct(const FArguments& InArgs, UEdGraphPin* InPin)
 	{
-		SNarrativeGraphPinBase::Construct(SNarrativeGraphPinBase::FArguments(), InPin);
+		SRPGGraphPinBase::Construct(SRPGGraphPinBase::FArguments(), InPin);
 	}
 
 protected:
@@ -64,11 +66,11 @@ public:
 	virtual ~FNarrativePinFactory() {}
 	virtual TSharedPtr<SGraphPin> CreatePin(UEdGraphPin* Pin) const override
 	{
-		if (Pin->GetOwningNode() && Pin->GetOwningNode()->IsA<UNarrativeNodeKnot>())
+		if (Pin->GetOwningNode() && Pin->GetOwningNode()->IsA<URPGGraphNodeKnot>())
 		{
-			return SNew(SNarrativeNodeKnotPin, Pin);
+			return SNew(SRPGNodeKnotPin, Pin);
 		}
-		else if (UNarrativeGraphNodeBase::PinNane == Pin->PinType.PinSubCategory)
+		else if (UNarrativeGraphNodeBase::PinNane == Pin->PinType.PinSubCategory || URPGGraphNodeBase::PinName == Pin->PinType.PinSubCategory)
 		{
 			return SNew(SNarrativeGraphPin, Pin);
 		}
@@ -105,7 +107,7 @@ void FNarrativeSystemEditorModule::StartupModule()
 		UDialogueBlueprint::StaticClass(),
 		[](UBlueprint* Blueprint, FCompilerResultsLog& InMessageLog, const FKismetCompilerOptions& InCompileOptions) -> TSharedPtr<FKismetCompilerContext>
 		{
-			return MakeShareable(new DialogueBlueprintCompiler(CastChecked<UDialogueBlueprint>(Blueprint), InMessageLog, InCompileOptions));
+			return MakeShareable(new FDialogueCompilerContext(CastChecked<UDialogueBlueprint>(Blueprint), InMessageLog, InCompileOptions));
 		}
 	);
 }

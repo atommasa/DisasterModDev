@@ -9,60 +9,115 @@
 #include "Abilities/AbilityAsset.h"
 #include "Assets/RPGAssetLibrary.h"
 
+UE_DEFINE_GAMEPLAY_TAG_COMMENT(Ability_Input, "Ability.Input", "This tag is used for input to activate the ability.")
+
 URPGAbilitySystemComponent::URPGAbilitySystemComponent(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer)
 {
 	
 }
 
-void URPGAbilitySystemComponent::AbilityLocalInputPressed(int32 InputID)
+void URPGAbilitySystemComponent::AbilityInputTagPressed(const FGameplayTag& InputTag)
 {
-	// Consume the input if this InputID is overloaded with GenericConfirm/Cancel and the GenericConfim/Cancel callback is bound
-	if (IsGenericConfirmInputBound(InputID))
+	if (!InputTag.IsValid())
 	{
-		LocalInputConfirm();
 		return;
 	}
 
-	if (IsGenericCancelInputBound(InputID))
+	const EInputRouteResult RouteResult = RouteInputTag(InputTag);
+
+	if (RouteResult == EInputRouteResult::Consumed || RouteResult == EInputRouteResult::Blocked)
 	{
-		LocalInputCancel();
 		return;
 	}
 
-	const FRPGId& InputAbilityId = EquippedAbilities.FindRef(InputID);
-	FGameplayAbilitySpec* FoundSpec = FindAbilitySpecFromHandle(LearnedAbilities.FindRef(InputAbilityId).AbilitySpecHandle);
+	const FRPGId* InputAbilityId = EquippedAbilities.Find(InputTag);
+	if (!InputAbilityId)
+	{
+		return;
+	}
+
+	const FAbilityData* AbilityData = LearnedAbilities.Find(*InputAbilityId);
+	if (!AbilityData)
+	{
+		return;
+	}
 
 	ABILITYLIST_SCOPE_LOCK();
-	if (FoundSpec && FoundSpec->InputID == InputID && FoundSpec->Ability)
+
+	FGameplayAbilitySpec* FoundSpec = FindAbilitySpecFromHandle(AbilityData->AbilitySpecHandle);
+
+	if (!FoundSpec || !FoundSpec->Ability)
 	{
-		FoundSpec->InputPressed = true;
-		if (FoundSpec->IsActive())
-		{
-			if (FoundSpec->Ability->bReplicateInputDirectly && IsOwnerActorAuthoritative() == false)
-			{
-				ServerSetInputPressed(FoundSpec->Handle);
-			}
-
-			AbilitySpecInputPressed(*FoundSpec);
-
-			TArray<UGameplayAbility*> Instances = FoundSpec->GetAbilityInstances();
-			const FGameplayAbilityActivationInfo& ActivationInfo = Instances.IsEmpty() ? FoundSpec->ActivationInfo : Instances.Last()->GetCurrentActivationInfoRef();
-
-			// Invoke the InputPressed event. This is not replicated here. If someone is listening, they may replicate the InputPressed event to the server.
-			InvokeReplicatedEvent(EAbilityGenericReplicatedEvent::InputPressed, FoundSpec->Handle, ActivationInfo.GetActivationPredictionKey());
-		}
-		else
-		{
-			// Ability is not active, so try to activate it
-			TryActivateAbility(FoundSpec->Handle);
-		}
+		return;
 	}
+
+	FoundSpec->InputPressed = true;
+
+	if (FoundSpec->IsActive())
+	{
+		AbilitySpecInputPressed(*FoundSpec);
+
+		return;
+	}
+
+	TryActivateAbility(FoundSpec->Handle);
 }
 
-void URPGAbilitySystemComponent::AbilityLocalInputReleased(int32 InputID)
+void URPGAbilitySystemComponent::AbilityInputTagReleased(const FGameplayTag& InputTag)
 {
-	Super::AbilityLocalInputReleased(InputID);
+	if (!InputTag.IsValid())
+	{
+		return;
+	}
+	
+	const FRPGId* InputAbilityId = EquippedAbilities.Find(InputTag);
+	if (!InputAbilityId)
+	{
+		return;
+	}
+
+	const FAbilityData* AbilityData = LearnedAbilities.Find(*InputAbilityId);
+	if (!AbilityData)
+	{
+		return;
+	}
+
+	ABILITYLIST_SCOPE_LOCK();
+
+	FGameplayAbilitySpec* FoundSpec = FindAbilitySpecFromHandle(AbilityData->AbilitySpecHandle);
+
+	if (!FoundSpec || !FoundSpec->Ability)
+	{
+		return;
+	}
+
+	FoundSpec->InputPressed = false;
+
+	if (!FoundSpec->IsActive())
+	{
+		return;
+	}
+
+	if (FoundSpec->Ability->bReplicateInputDirectly && !IsOwnerActorAuthoritative())
+	{
+		ServerSetInputReleased(FoundSpec->Handle);
+	}
+
+	AbilitySpecInputReleased(*FoundSpec);
+
+	const TArray<UGameplayAbility*> Instances = FoundSpec->GetAbilityInstances();
+
+	const FGameplayAbilityActivationInfo& ActivationInfo =
+		Instances.IsEmpty()
+		? FoundSpec->ActivationInfo
+		: Instances.Last()->GetCurrentActivationInfoRef();
+
+	InvokeReplicatedEvent(
+		EAbilityGenericReplicatedEvent::InputReleased,
+		FoundSpec->Handle,
+		ActivationInfo.GetActivationPredictionKey()
+	);
 }
 
 ABaseCharacter* URPGAbilitySystemComponent::GetBaseCharacterOwner() const
@@ -93,7 +148,7 @@ void URPGAbilitySystemComponent::LearnAbility(const FAbilityData& AbilityData, T
 		*GetBaseCharacterOwner()->GetName(), *AbilityData.AbilityId.ToString());
 
 	// Asynchronously load the AbilityAsset
-	TSharedPtr<FStreamableHandle> Handle = URPGAssetLibrary::GetAssetByRPGIdAsync(AbilityData.AbilityId, { "Ability", "UI" },
+	TSharedPtr<FStreamableHandle> Handle = URPGAssetLibrary::LoadAssetByRPGIdAsync(AbilityData.AbilityId, { "Ability", "UI" },
 		[WeakThis = MakeWeakObjectPtr(this), AbilityData, OnLearnedCallback](URPGPrimaryAsset* Asset)
 		{
 			if (!WeakThis.IsValid())
@@ -139,7 +194,7 @@ void URPGAbilitySystemComponent::LearnAbilities(const TArray<FAbilityData>& Abil
 	TArray<FRPGId> AbilityIdsToLoad;
 	AbilitiesToLearn.GetKeys(AbilityIdsToLoad);
 
-	TSharedPtr<FStreamableHandle> Handle = URPGAssetLibrary::GetAssetArrayByRPGIdsAsync(AbilityIdsToLoad, {"Ability", "UI"}, 
+	TSharedPtr<FStreamableHandle> Handle = URPGAssetLibrary::LoadAssetArrayByRPGIdsAsync(AbilityIdsToLoad, {"Ability", "UI"}, 
 		[WeakThis = MakeWeakObjectPtr(this), AbilitiesToLearn, OnLearnedCallback](TArray<URPGPrimaryAsset*> Assets)
 		{
 			if (!WeakThis.IsValid())
@@ -220,23 +275,22 @@ bool URPGAbilitySystemComponent::TryActivateAbilityById(const FRPGId& AbilityId,
 	}
 }
 
-void URPGAbilitySystemComponent::EquipAbilityById(const FRPGId& AbilityId, int32 InputId)
+void URPGAbilitySystemComponent::EquipAbilityById(const FRPGId& AbilityId, const FGameplayTag& InputTag)
 {
 	if (FGameplayAbilitySpec* FoundSpec = FindAbilitySpecFromHandle(LearnedAbilities.FindRef(AbilityId).AbilitySpecHandle))
 	{
-		// If the ability is already bound to a different input, unbind it first
-		if (FGameplayAbilitySpec* OldSpec = FindAbilitySpecFromInputID(InputId))
-		{
-			OldSpec->InputID = INDEX_NONE;
-		}
+		// Remove all input tags
+		const FGameplayTagContainer& InputChildTags = FoundSpec->DynamicAbilityTags.Filter(FGameplayTagContainer(Ability_Input));
+		FoundSpec->DynamicAbilityTags.RemoveTags(InputChildTags);
 
-		FoundSpec->InputID = InputId;
+		// Add input tag
+		FoundSpec->DynamicAbilityTags.AddTag(InputTag);
 
 		// Mark the ability spec as dirty to ensure it replicates to clients
 		MarkAbilitySpecDirty(*FoundSpec);
 
 		// Update the EquippedAbilities map
-		EquippedAbilities.Add(InputId, AbilityId);
+		EquippedAbilities.Add(InputTag, AbilityId);
 	}
 	else
 	{
@@ -244,21 +298,25 @@ void URPGAbilitySystemComponent::EquipAbilityById(const FRPGId& AbilityId, int32
 	}
 }
 
-void URPGAbilitySystemComponent::UnequipAbilityByInputId(int32 InputId)
+void URPGAbilitySystemComponent::UnequipAbilityByInputId(const FGameplayTag& InputTag)
 {
-	if (FGameplayAbilitySpec* FoundSpec = FindAbilitySpecFromInputID(InputId))
+	const FRPGId& AbilityId = EquippedAbilities.FindRef(InputTag);
+
+	if (FGameplayAbilitySpec* FoundSpec = FindAbilitySpecFromHandle(LearnedAbilities.FindRef(AbilityId).AbilitySpecHandle))
 	{
-		FoundSpec->InputID = INDEX_NONE;
+		// Remove all input tags
+		const FGameplayTagContainer& InputChildTags = FoundSpec->DynamicAbilityTags.Filter(FGameplayTagContainer(Ability_Input));
+		FoundSpec->DynamicAbilityTags.RemoveTags(InputChildTags);
 
 		// Mark the ability spec as dirty to ensure it replicates to clients
 		MarkAbilitySpecDirty(*FoundSpec);
 
 		// Remove from the EquippedAbilities map
-		EquippedAbilities.Remove(InputId);
+		EquippedAbilities.Remove(InputTag);
 	}
 	else
 	{
-		UE_LOG(LogTemp, Display, TEXT("URPGAbilitySystemComponent::UnequipAbilityByInputId - No ability found equipped to InputId: %d"), InputId);
+		UE_LOG(LogTemp, Display, TEXT("URPGAbilitySystemComponent::UnequipAbilityByInputId - No ability found equipped to InputId: %s"), *InputTag.ToString());
 	}
 }
 
@@ -328,6 +386,80 @@ void URPGAbilitySystemComponent::OnLearnedAbility(UAbilityAsset* AbilityAsset, c
 
 	UE_LOG(LogTemp, Display, TEXT("URPGAbilitySystemComponent::LearnAbility - %s learned ability: %s at level %d"),
 		*GetBaseCharacterOwner()->GetName(), *AbilityAsset->GetId().ToString(), NewAbilityData.Level);
+}
+
+FDelegateHandle URPGAbilitySystemComponent::RegisterInputTagListener(UObject* Owner, FInputTagListener Listener, int32 Priority)
+{
+	check(Owner);
+
+	const FDelegateHandle NewHandle = FDelegateHandle(FDelegateHandle::GenerateNewHandle);
+
+	FInputTagListenerEntry NewEntry;
+	NewEntry.Handle = NewHandle;
+	NewEntry.Owner = Owner;
+	NewEntry.Priority = Priority;
+	NewEntry.Listener = MoveTemp(Listener);
+
+	InputTagListeners.Add(MoveTemp(NewEntry));
+
+	InputTagListeners.Sort(
+		[](const FInputTagListenerEntry& A,
+			const FInputTagListenerEntry& B)
+		{
+			return A.Priority > B.Priority;
+		});
+
+	return NewHandle;
+}
+
+void URPGAbilitySystemComponent::UnregisterInputTagListener(FDelegateHandle Handle)
+{
+	InputTagListeners.RemoveAll(
+		[Handle](const FInputTagListenerEntry& Entry)
+		{
+			return Entry.Handle == Handle;
+		});
+}
+
+EInputRouteResult URPGAbilitySystemComponent::RouteInputTag(const FGameplayTag & InputTag)
+{
+	UE_LOG(
+		LogTemp,
+		Warning,
+		TEXT("[InputRouter] Route %s, ListenerCount=%d"),
+		*InputTag.ToString(),
+		InputTagListeners.Num()
+	);
+
+	InputTagListeners.RemoveAll([](const FInputTagListenerEntry& Entry)
+		{
+			return !Entry.Owner.IsValid() || !Entry.Listener.IsBound();
+		});
+
+	TArray<FInputTagListener> Listeners;
+	Listeners.Reserve(InputTagListeners.Num());
+
+	for (const FInputTagListenerEntry& Entry : InputTagListeners)
+	{
+		Listeners.Add(Entry.Listener);
+	}
+
+	for (const FInputTagListener& Listener : Listeners)
+	{
+		if (!Listener.IsBound())
+		{
+			continue;
+		}
+
+		const EInputRouteResult Result = Listener.Execute(InputTag);
+
+		if (Result != EInputRouteResult::PassThrough)
+		{
+			return Result;
+		}
+	}
+
+	return EInputRouteResult::PassThrough;
 }
 
 UGameplayAbility* URPGAbilitySystemComponent::CreateNewInstanceOfAbility(FGameplayAbilitySpec& Spec, const UGameplayAbility* Ability)

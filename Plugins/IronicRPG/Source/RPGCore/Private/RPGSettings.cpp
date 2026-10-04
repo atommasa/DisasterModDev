@@ -14,9 +14,6 @@ void URPGSettings::PostEditChangeProperty(FPropertyChangedEvent& PropertyChanged
 {
 	Super::PostEditChangeProperty(PropertyChangedEvent);
 
-	if (PropertyChangedEvent.MemberProperty->GetFName() == GET_MEMBER_NAME_CHECKED(URPGSettings, DefaultPartyMembers))
-	{
-		CLAMPED_ARRAY(DefaultPartyMembers, MaxPartyMembers)
-	}
+	
 }
 #endif // WITH_EDITOR

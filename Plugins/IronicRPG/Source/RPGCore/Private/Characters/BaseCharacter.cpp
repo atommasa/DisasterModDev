@@ -1,4 +1,4 @@
-// Copyright Ironic Studio. All Rights Reserved.
+ï»¿// Copyright Ironic Studio. All Rights Reserved.
 
 
 #include "Characters/BaseCharacter.h"
@@ -28,8 +28,25 @@
 ABaseCharacter::ABaseCharacter(const FObjectInitializer& ObjectInitializer)
 	: Super(ObjectInitializer.SetDefaultSubobjectClass<URPGCharacterMovementComponent>(CharacterMovementComponentName))
 {
- 	// Set this character to call Tick() every frame.  You can turn this off to improve performance if you don't need it.
-	PrimaryActorTick.bCanEverTick = true;
+ 	// We don't need to call Tick every frame
+	PrimaryActorTick.bCanEverTick = false;
+
+	// We do not use network replication by default
+	bReplicates = false;
+	SetReplicateMovement(false);
+
+	bAlwaysRelevant = false;
+	bOnlyRelevantToOwner = false;
+	bNetUseOwnerRelevancy = false;
+
+	NetDormancy = DORM_Never;
+	NetUpdateFrequency = 0.0f;
+	MinNetUpdateFrequency = 0.0f;
+
+	// Controller settings
+	bUseControllerRotationPitch = false;
+	bUseControllerRotationYaw = false;
+	bUseControllerRotationRoll = false;
 
 	if (USkeletalMeshComponent* MeshComp = GetMesh())
 	{
@@ -56,6 +73,27 @@ void ABaseCharacter::BeginPlay()
 
 	// Initialize team tag
 	ResetDefaultTeamTag();
+}
+
+void ABaseCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	// Do not allow an old animation preload request to complete after this
+	// character has entered EndPlay or after a world travel has completed.
+	CancelActiveAnimPreload();
+
+	if (AIController)
+	{
+		if (UBehaviorTreeComponent* BTComponent = Cast<UBehaviorTreeComponent>(AIController->GetBrainComponent()))
+		{
+			BTComponent->StopTree(EBTStopMode::Safe);
+		}
+
+		AIController->UnPossess();
+	}
+
+	RPGFlow::NotifyObjectEndingPlay(this);
+
+	Super::EndPlay(EndPlayReason);
 }
 
 void ABaseCharacter::PostInitializeComponents()
@@ -88,12 +126,6 @@ void ABaseCharacter::PostInitializeComponents()
 			CombatAttributes->OnTakeDamage.AddUObject(CombatComponent, &UCombatComponent::RequestHitReaction);
 			// CombatAttributes->OnHeal.AddUObject(CombatComponent, &UCombatComponent::HandleHeal);
 		}
-	}
-
-	// Learn default abilities
-	for (const FAbilityData& AbilityData : DefaultAbilities)
-	{
-		AbilitySystemComponent->LearnAbility(AbilityData);
 	}
 }
 
@@ -159,21 +191,41 @@ void ABaseCharacter::GetCharacterAnimEntry(FCharacterAnimInput& InputStruct, OUT
 
 void ABaseCharacter::PreloadAnimData(TFunction<void()> Callback)
 {
+	check(IsInGameThread());
+
+	CancelActiveAnimPreload();
+
+	const TSharedRef<FAnimPreloadRequestState, ESPMode::ThreadSafe> RequestState =
+		MakeShared<FAnimPreloadRequestState, ESPMode::ThreadSafe>();
+
+	RequestState->Generation = ++AnimPreloadGeneration;
+	RequestState->CompletionCallback = MoveTemp(Callback);
+	ActiveAnimPreloadRequest = RequestState;
+
 	if (!AbilitySystemComponent || !CharacterAsset)
 	{
+		UE_LOG(LogTemp, Warning,
+			TEXT("[ABaseCharacter::PreloadAnimData] Missing ability system or character asset for %s; skipping animation preload. Generation=%d"),
+			*GetName(), RequestState->Generation);
+
+		RequestState->bEnumerationFinished = true;
+		TryFinishAnimPreload(RequestState);
 		return;
 	}
 
 	UChooserTable* AnimationTable = CharacterAsset->GetAnimationTable().Get();
 	if (!AnimationTable)
 	{
-		UE_LOG(LogTemp, Display, TEXT("[ABaseCharacter::PreLoadAnimData] No animation table found for character %s"), *GetName());
+		UE_LOG(LogTemp, Display,
+			TEXT("[ABaseCharacter::PreloadAnimData] No animation table found for character %s; skipping animation preload. Generation=%d"),
+			*GetName(), RequestState->Generation);
 
+		RequestState->bEnumerationFinished = true;
+		TryFinishAnimPreload(RequestState);
 		return;
 	}
 
 	TArray<FGameplayTagContainer> AbilityTagsSet;
-	
 	for (const auto& AbilityDataPair : AbilitySystemComponent->GetLearnedAbilities())
 	{
 		if (const UAbilityAsset* AbilityData = AbilityDataPair.Value.AbilityAsset)
@@ -184,70 +236,85 @@ void ABaseCharacter::PreloadAnimData(TFunction<void()> Callback)
 			}
 		}
 	}
-	
+
 	for (FInstancedStruct& Struct : AnimationTable->ColumnsStructs)
 	{
-		if (FGameplayTagColumn* Column = Struct.GetMutablePtr<FGameplayTagColumn>())
+		FGameplayTagColumn* Column = Struct.GetMutablePtr<FGameplayTagColumn>();
+		if (!Column)
 		{
-			const FChooserParameterGameplayTagBase* Param = Column->InputValue.GetPtr<FChooserParameterGameplayTagBase>();
-			if (!Param)
+			continue;
+		}
+
+		const FChooserParameterGameplayTagBase* Param =
+			Column->InputValue.GetPtr<FChooserParameterGameplayTagBase>();
+		if (!Param)
+		{
+			continue;
+		}
+
+#if WITH_EDITORONLY_DATA
+		const TArray<FInstancedStruct>* ResultsStructsPtr =
+			AnimationTable->IsCookedData() ? &AnimationTable->CookedResults : &AnimationTable->ResultsStructs;
+#else
+		const TArray<FInstancedStruct>* ResultsStructsPtr = &AnimationTable->CookedResults;
+#endif
+
+		if (!ResultsStructsPtr)
+		{
+			UE_LOG(LogTemp, Display,
+				TEXT("[ABaseCharacter::PreloadAnimData] No results found for character %s; skipping animation preload. Generation=%d"),
+				*GetName(), RequestState->Generation);
+
+			RequestState->bEnumerationFinished = true;
+			TryFinishAnimPreload(RequestState);
+			return;
+		}
+
+		const TArray<FInstancedStruct>& ResultsStructs = *ResultsStructsPtr;
+		UE_LOG(LogTemp, Display,
+			TEXT("[ABaseCharacter::PreloadAnimData] Found %d rows for character %s. Generation=%d"),
+			ResultsStructs.Num(), *GetName(), RequestState->Generation);
+		
+		bool bHasMatchingTag = false;
+		for (int32 Index = 0; Index < Column->RowValues.Num(); ++Index)
+		{
+			if (!AbilityTagsSet.Contains(Column->RowValues[Index]) || !ResultsStructs.IsValidIndex(Index))
 			{
 				continue;
 			}
-#if WITH_EDITORONLY_DATA
-			const TArray<FInstancedStruct>* ResultsStructsPtr = AnimationTable->IsCookedData() ? &AnimationTable->CookedResults : &AnimationTable->ResultsStructs;
-#else // WITH_EDITORONLY_DATA
-			const TArray<FInstancedStruct>* ResultsStructsPtr = &AnimationTable->CookedResults;
-#endif // WITH_EDITORONLY_DATA
-			if (!ResultsStructsPtr)
-			{
-				UE_LOG(LogTemp, Display, TEXT("[ABaseCharacter::PreLoadAnimData] No results found in animation table for character %s"), *GetName());
-				return;
-			}
-			
-			const TArray<FInstancedStruct>& ResultsStructs = *ResultsStructsPtr;
-			UE_LOG(LogTemp, Display, TEXT("Found %d rows in animation table for character %s"), ResultsStructs.Num(), *GetName());
 
-			if (!PreloadedAnimHandles.IsEmpty())
-			{
-				UE_LOG(LogTemp, Display, TEXT("[ABaseCharacter::PreLoadAnimData] Canceling %d previous preload handles for character %s"), PreloadedAnimHandles.Num(), *GetName());
+			UE_LOG(LogTemp, Display,
+				TEXT("[ABaseCharacter::PreloadAnimData] Container=%s Generation=%d"),
+				*Column->RowValues[Index].ToString(), RequestState->Generation);
 
-				// Cancel previous handles before starting new preload to avoid unnecessary memory usage
-				for (const TSharedPtr<FStreamableHandle>& Handle : PreloadedAnimHandles)
-				{
-					if (Handle.IsValid())
-					{
-						Handle->CancelHandle();
-					}
-				}
+			RecursivePreloadAnimData(ResultsStructs[Index], RequestState);
+			bHasMatchingTag = true;
+		}
 
-				PreloadedAnimHandles.Empty();
-				PreloadedAnimDataCount = 0;
-			}
+		RequestState->bEnumerationFinished = true;
+		TryFinishAnimPreload(RequestState);
 
-			bool bHasMatchingTag = false;
-			
-			for (int32 i = 0; i < Column->RowValues.Num(); i++)
-			{
-				if (AbilityTagsSet.Contains(Column->RowValues[i]) && ResultsStructs.IsValidIndex(i))
-				{
-					UE_LOG(LogTemp, Display, TEXT("Container: %s"), *Column->RowValues[i].ToString());
-					RecursivePreloadAnimData(ResultsStructs[i], PreloadedAnimHandles, Callback);
-
-					bHasMatchingTag = true;
-				}
-			}
-
-			if (bHasMatchingTag)
-			{
-				return;
-			}
+		if (bHasMatchingTag)
+		{
+			return;
 		}
 	}
+
+	RequestState->bEnumerationFinished = true;
+	TryFinishAnimPreload(RequestState);
 }
 
-void ABaseCharacter::RecursivePreloadAnimData(const FInstancedStruct& ResultsStruct, TArray<TSharedPtr<FStreamableHandle>>& OutHandles, TFunction<void()> Callback) const
+void ABaseCharacter::RecursivePreloadAnimData(
+	const FInstancedStruct& ResultsStruct,
+	const TSharedRef<FAnimPreloadRequestState, ESPMode::ThreadSafe>& RequestState)
 {
+	check(IsInGameThread());
+
+	if (RequestState->bCanceled || RequestState->bFinished)
+	{
+		return;
+	}
+
 	if (const FSoftAssetChooser* SoftAssetChooser = ResultsStruct.GetPtr<FSoftAssetChooser>())
 	{
 		if (SoftAssetChooser->Asset.IsNull())
@@ -255,34 +322,48 @@ void ABaseCharacter::RecursivePreloadAnimData(const FInstancedStruct& ResultsStr
 			return;
 		}
 
-		// Load asset
+		++RequestState->PendingCount;
+
+		const TWeakObjectPtr<ABaseCharacter> WeakThis(this);
+		const TWeakPtr<FAnimPreloadRequestState, ESPMode::ThreadSafe> WeakRequest = RequestState;
+
 		TSharedPtr<FStreamableHandle> Handle = UAssetManager::GetStreamableManager().RequestAsyncLoad(
 			SoftAssetChooser->Asset.ToSoftObjectPath(),
-			FStreamableDelegate::CreateLambda([WeakThis = TWeakObjectPtr<const ABaseCharacter>(this), Callback]()
+			FStreamableDelegate::CreateLambda([WeakThis, WeakRequest]()
+			{
+				ABaseCharacter* StrongThis = WeakThis.Get();
+				const TSharedPtr<FAnimPreloadRequestState, ESPMode::ThreadSafe> StrongRequest = WeakRequest.Pin();
+				if (!StrongThis || !StrongRequest)
 				{
-					ABaseCharacter* StrongThis = const_cast<ABaseCharacter*>(WeakThis.Get());
-					if (!StrongThis)
-					{
-						return;
-					}
+					return;
+				}
 
-					StrongThis->PreloadedAnimDataCount--;
+				StrongRequest->PendingCount = FMath::Max(0, StrongRequest->PendingCount - 1);
 
-					if (StrongThis->PreloadedAnimDataCount <= 0)
-					{
-						UE_LOG(LogTemp, Display, TEXT("[ABaseCharacter::RecursivePreloadAnimData] Finished preloading animation data for character %s"), *StrongThis->GetName());
-						StrongThis->PreloadedAnimHandles.Empty();
+				if (StrongRequest->bCanceled || StrongRequest->bFinished)
+				{
+					return;
+				}
 
-						Callback();
-					}
-				})
-		);
-		
-		OutHandles.Add(Handle);
+				StrongThis->TryFinishAnimPreload(StrongRequest.ToSharedRef());
+			}));
 
-		PreloadedAnimDataCount++;
+		if (Handle.IsValid())
+		{
+			RequestState->Handles.Add(Handle);
+		}
+		else
+		{
+			RequestState->PendingCount = FMath::Max(0, RequestState->PendingCount - 1);
+			UE_LOG(LogTemp, Warning,
+				TEXT("[ABaseCharacter::RecursivePreloadAnimData] Failed to create preload handle for character %s. Generation=%d"),
+				*GetName(), RequestState->Generation);
+		}
+
+		return;
 	}
-	else if (const FNestedChooser* NestedChooser = ResultsStruct.GetPtr<FNestedChooser>())
+
+	if (const FNestedChooser* NestedChooser = ResultsStruct.GetPtr<FNestedChooser>())
 	{
 		UChooserTable* NestedTable = Cast<UChooserTable>(NestedChooser->Chooser);
 		if (!NestedTable)
@@ -291,26 +372,83 @@ void ABaseCharacter::RecursivePreloadAnimData(const FInstancedStruct& ResultsStr
 		}
 
 		const TArray<FInstancedStruct>* ResultsStructsPtr = nullptr;
-
 #if WITH_EDITORONLY_DATA
 		ResultsStructsPtr = NestedTable->IsCookedData() ? &NestedTable->CookedResults : &NestedTable->ResultsStructs;
-#else // WITH_EDITORONLY_DATA
+#else
 		ResultsStructsPtr = &NestedTable->CookedResults;
-#endif // WITH_EDITORONLY_DATA
+#endif
 
 		if (!ResultsStructsPtr)
 		{
 			return;
 		}
 
-		const TArray<FInstancedStruct>& ResultsStructs = *ResultsStructsPtr;
-
-		for (const FInstancedStruct& NestedResultStruct : ResultsStructs)
+		for (const FInstancedStruct& NestedResultStruct : *ResultsStructsPtr)
 		{
-			// Load nested chooser assets
-			RecursivePreloadAnimData(NestedResultStruct, OutHandles, Callback);
+			RecursivePreloadAnimData(NestedResultStruct, RequestState);
 		}
 	}
+}
+
+void ABaseCharacter::TryFinishAnimPreload(
+	const TSharedRef<FAnimPreloadRequestState, ESPMode::ThreadSafe>& RequestState)
+{
+	check(IsInGameThread());
+
+	if (RequestState->bCanceled || RequestState->bFinished ||
+		!RequestState->bEnumerationFinished || RequestState->PendingCount > 0)
+	{
+		return;
+	}
+
+	if (!ActiveAnimPreloadRequest.IsValid() ||
+		ActiveAnimPreloadRequest.Get() != &RequestState.Get())
+	{
+		return;
+	}
+
+	RequestState->bFinished = true;
+	RequestState->Handles.Empty();
+
+	UE_LOG(LogTemp, Display,
+		TEXT("[ABaseCharacter::PreloadAnimData] Finished animation preload for character %s. Generation=%d"),
+		*GetName(), RequestState->Generation);
+
+	TFunction<void()> CompletionCallback = MoveTemp(RequestState->CompletionCallback);
+	ActiveAnimPreloadRequest.Reset();
+
+	if (CompletionCallback)
+	{
+		CompletionCallback();
+	}
+}
+
+void ABaseCharacter::CancelActiveAnimPreload()
+{
+	check(IsInGameThread());
+
+	if (!ActiveAnimPreloadRequest.IsValid())
+	{
+		return;
+	}
+
+	TSharedPtr<FAnimPreloadRequestState, ESPMode::ThreadSafe> PreviousRequest = MoveTemp(ActiveAnimPreloadRequest);
+	PreviousRequest->bCanceled = true;
+	PreviousRequest->CompletionCallback = nullptr;
+
+	UE_LOG(LogTemp, Display,
+		TEXT("[ABaseCharacter::PreloadAnimData] Canceling generation %d with %d handles for character %s"),
+		PreviousRequest->Generation, PreviousRequest->Handles.Num(), *GetName());
+
+	for (const TSharedPtr<FStreamableHandle>& Handle : PreviousRequest->Handles)
+	{
+		if (Handle.IsValid())
+		{
+			Handle->CancelHandle();
+		}
+	}
+
+	PreviousRequest->Handles.Empty();
 }
 
 void ABaseCharacter::SetAIControl(bool bEnable)
@@ -397,9 +535,15 @@ void ABaseCharacter::InitCharacterData(const UCharacterAsset* Asset, const FChar
 
 void ABaseCharacter::InitCharacterDataById(const FRPGId& InId, const FCharacterSaveData& Data)
 {
-	URPGAssetLibrary::GetAssetByRPGIdAsync(InId, { "Character", "UI" }, [&](auto&& Result)
+	const FCharacterSaveData DataCopy = Data;
+	TWeakObjectPtr<ABaseCharacter> WeakThis(this);
+
+	URPGAssetLibrary::LoadAssetByRPGIdAsync(InId, { "Character", "UI" }, [WeakThis, DataCopy](URPGPrimaryAsset* Result)
 		{
-			this->InitCharacterData(Cast<UCharacterAsset>(Result), Data);
+			if (ABaseCharacter* Character = WeakThis.Get())
+			{
+				Character->InitCharacterData(Cast<UCharacterAsset>(Result), DataCopy);
+			}
 		});
 }
 
@@ -415,9 +559,14 @@ void ABaseCharacter::InitCharacterDataDefault(const UCharacterAsset* Asset)
 
 void ABaseCharacter::InitCharacterDataDefaultById(const FRPGId& InId)
 {
-	URPGAssetLibrary::GetAssetByRPGIdAsync(InId, { "Character", "UI" }, [&](auto&& Result)
+	TWeakObjectPtr<ABaseCharacter> WeakThis(this);
+
+	URPGAssetLibrary::LoadAssetByRPGIdAsync(InId, { "Character", "UI" }, [WeakThis](URPGPrimaryAsset* Result)
 		{
-			this->InitCharacterDataDefault(Cast<UCharacterAsset>(Result));
+			if (ABaseCharacter* Character = WeakThis.Get())
+			{
+				Character->InitCharacterDataDefault(Cast<UCharacterAsset>(Result));
+			}
 		});
 }
 
@@ -475,27 +624,35 @@ void ABaseCharacter::SetCharacterData(const FCharacterSaveData& Data)
 	}
 
 	// Unlearn all current abilities
-	// AbilitySystemComponent->UnlearnAllAbilities();
-	// TODO: ¥u§R°£¨¤¦âªº¾Ç²ß§Þ¯à¡A«O¯d¹w³]§Þ¯à¡A³o¼Ë´N¤£·|¦]¬°¤Á´«¨¤¦â¦Ó¥á¥¢¹w³]§Þ¯à¤F
+	AbilitySystemComponent->UnlearnAllAbilities();
 
-	// Learn saved abilities
-	AbilitySystemComponent->LearnAbilities(Data.LearnedAbilities, [this, Data](const TArray<FAbilityData>& LearnedAbilities)
+	// Learn default and saved abilities
+	TArray<FAbilityData> AbilitiesToLearn;
+	AbilitiesToLearn.Append(DefaultAbilities);
+	AbilitiesToLearn.Append(Data.LearnedAbilities);
+	
+	AbilitySystemComponent->LearnAbilities(AbilitiesToLearn, [this, Data](const TArray<FAbilityData>& LearnedAbilities)
 		{
-			for (int32 i = 0; i < Data.EquippedAbilities.Num(); i++)
+			for (TPair<FGameplayTag, FRPGId> Pair : Data.EquippedAbilities)
 			{
-				AbilitySystemComponent->EquipAbilityById(Data.EquippedAbilities[i], i);
+				if (!Pair.Key.IsValid() || !Pair.Value.IsValid())
+				{
+					continue;
+				}
+
+				AbilitySystemComponent->EquipAbilityById(Pair.Value, Pair.Key);
 			}
+
+			PreloadAnimData([WeakThis = TWeakObjectPtr<const ABaseCharacter>(this)]()
+				{
+					if (ABaseCharacter* StrongThis = const_cast<ABaseCharacter*>(WeakThis.Get()))
+					{
+						StrongThis->OnCharacterDataInitialized.Broadcast(StrongThis);
+					}
+				});
 		});
 
 	CharacterSaveData = Data;
-
-	PreloadAnimData([WeakThis = TWeakObjectPtr<const ABaseCharacter>(this)]()
-	{
-		if (ABaseCharacter* StrongThis = const_cast<ABaseCharacter*>(WeakThis.Get()))
-		{
-			StrongThis->OnCharacterDataInitialized.Broadcast(StrongThis);
-		}
-	});
 }
 
 const FCharacterSaveData& ABaseCharacter::GetCharacterData() const

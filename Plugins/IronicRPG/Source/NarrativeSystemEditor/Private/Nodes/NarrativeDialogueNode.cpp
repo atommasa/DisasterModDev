@@ -2,44 +2,30 @@
 
 
 #include "Nodes/NarrativeDialogueNode.h"
-#include "Framework/Commands/UIAction.h"
-#include "Widgets/Input/SMultiLineEditableTextBox.h"
 #include "EdGraph/EdGraphPin.h"
 #include "ToolMenu.h"
 #include "Nodes/NarrativeDialogueNodeInfo.h"
-#include "NarrativeAsset.h"
-#include "Assets/NarrativeAssetEditorApp.h"
-#include "Characters/CharacterAsset.h"
 #include "Widgets/Text/SRichTextBlock.h"
-#include "Components/RichTextBlock.h"
 #include "Decorators/RPGTextDecoratorInstance.h"
 #include "Kismet2/BlueprintEditorUtils.h"
 #include "NarrativeEditorUtils.h"
 
 FText UNarrativeDialogueNode::GetNodeTitle(ENodeTitleType::Type TitleType) const
 {
-	UNarrativeDialogueNodeInfo* DialogueNodeInfo = Cast<UNarrativeDialogueNodeInfo>(GetNodeInfo());
+	UNarrativeDialogueNodeInfo* DialogueNodeInfo = GetNodeInfoAs<UNarrativeDialogueNodeInfo>();
 	if (!DialogueNodeInfo)
 	{
 		return FText::FromString(TEXT("Unknown Speaker"));
 	}
 
-	UDialogue* Dialogue = Cast<UDialogue>(GetNarrativeAsset()->GeneratedClass->GetDefaultObject());
-	if (!Dialogue)
+	FString SpeakerName = DialogueNodeInfo->SpeakerName.ToString();
+
+	if (!DialogueNodeInfo->OverriddenName.IsEmpty())
 	{
-		return FText::FromString(TEXT("Unknown Speaker"));
+		SpeakerName = DialogueNodeInfo->OverriddenName.ToString() + FString::Printf(TEXT(" (%s)"), *SpeakerName);
 	}
 
-	for (const FSpeakerData& SpeakerData : Dialogue->Speakers)
-	{
-		FString SpeakerDisplayName = SpeakerData.GetSpeakerDisplayName().ToString();
-		if (SpeakerDisplayName == DialogueNodeInfo->SpeakerName.ToString())
-		{
-			return FText::FromString(TEXT("Speaker : ") + SpeakerDisplayName);
-		}
-	}
-
-	return FText::FromString(TEXT("Unknown Speaker"));
+	return FText::FromString(TEXT("Speaker : ") + SpeakerName);
 }
 
 void UNarrativeDialogueNode::GetNodeContextMenuActions(UToolMenu* Menu, UGraphNodeContextMenuContext* Context) const
@@ -58,10 +44,10 @@ TSharedPtr<SGraphNode> UNarrativeDialogueNode::CreateVisualWidget()
 
 void UNarrativeDialogueNode::AllocateDefaultPins()
 {
-	SetNodeInfo(NewObject<UNarrativeDialogueNodeInfo>(this));
+	SetNodeInfoObject(NewObject<UNarrativeDialogueNodeInfo>(this));
 
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Output, TEXT(""));
 }
 
 FText UNarrativeDialogueNode::CreateCallableBindingComment() const
@@ -86,7 +72,7 @@ void UNarrativeDialogueNode::CreateCallableBindingParameterPins(UK2Node_Editable
 	);
 }
 
-TSharedRef<SWidget> SNarrativeDialogueNode::CreateNarrativeTitleWidget()
+TSharedRef<SWidget> SNarrativeDialogueNode::CreateNodeTitleWidget()
 {
 	return SNew(SBorder)
 		.BorderImage(FAppStyle::GetBrush("Graph.Node.TitleBackground"))
@@ -119,7 +105,7 @@ TSharedRef<SWidget> SNarrativeDialogueNode::CreateNarrativeTitleWidget()
 		];
 }
 
-TSharedRef<SWidget> SNarrativeDialogueNode::CreateNarrativeNodeCenterContent()
+TSharedRef<SWidget> SNarrativeDialogueNode::CreateNodeNodeCenterContent()
 {
 	UNarrativeDialogueNode* DialogueNode = Cast<UNarrativeDialogueNode>(GraphNode);
 	if (!DialogueNode)
@@ -133,7 +119,7 @@ TSharedRef<SWidget> SNarrativeDialogueNode::CreateNarrativeNodeCenterContent()
 		return SNullWidget::NullWidget;
 	}
 
-	if (DialogueNodeInfo->Dialogue.IsEmpty())
+	if (DialogueNodeInfo->DialogueLine.DialogueText.IsEmpty())
 	{
 		return SNew(SVerticalBox)
 			+ SVerticalBox::Slot()
@@ -198,7 +184,7 @@ TSharedRef<SWidget> SNarrativeDialogueNode::CreateTitleComboButtonMenuContent()
 								Node->Modify();
 								Node->GetGraph()->Modify();
 
-								if (UNarrativeDialogueNodeInfo* DialogueNodeInfo = Cast<UNarrativeDialogueNodeInfo>(Node->GetNodeInfo()))
+								if (UNarrativeDialogueNodeInfo* DialogueNodeInfo = Cast<UNarrativeDialogueNodeInfo>(Node->GetNarrativeNodeInfo()))
 								{
 									DialogueNodeInfo->Modify();
 									DialogueNodeInfo->SpeakerName = SpeakerName;
@@ -232,9 +218,9 @@ FText SNarrativeDialogueNode::GetEditableDialogueText() const
 {
 	if (const UNarrativeDialogueNode* DialogueNode = Cast<UNarrativeDialogueNode>(GraphNode))
 	{
-		if (const UNarrativeDialogueNodeInfo* Info = Cast<UNarrativeDialogueNodeInfo>(DialogueNode->GetNodeInfo()))
+		if (const UNarrativeDialogueNodeInfo* Info = Cast<UNarrativeDialogueNodeInfo>(DialogueNode->GetNarrativeNodeInfo()))
 		{
-			return Info->Dialogue;
+			return Info->DialogueLine.DialogueText;
 		}
 	}
 

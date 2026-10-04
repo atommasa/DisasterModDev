@@ -8,6 +8,6 @@ void UNarrativeNodeInfo::PostEditChangeChainProperty(FPropertyChangedChainEvent&
 {
 	Super::PostEditChangeProperty(PropertyChangedChainEvent);
 
-	OnNodeInfoPropertyChanged.Broadcast(PropertyChangedChainEvent);
+	OnNodeInfoPropertyChanged.Broadcast();
 }
 #endif // WITH_EDITOR

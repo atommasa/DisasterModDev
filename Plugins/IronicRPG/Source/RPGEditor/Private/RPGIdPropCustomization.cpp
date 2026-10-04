@@ -3,6 +3,8 @@
 #pragma once
 
 #include "RPGIdPropCustomization.h"
+#include "SRPGIdAssetPicker.h"
+#include "SRPGIdClaimEditor.h"
 #include "DetailWidgetRow.h"
 #include "DetailLayoutBuilder.h"
 #include "PropertyCustomizationHelpers.h"
@@ -25,6 +27,26 @@ void FRPGIdCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHa
 	}
 
 	Handler = PropertyHandle;
+	InitLimitedType();
+	if (Handler->HasMetaData(ID_CLAIM_TAG))
+	{
+		TArray<UObject*> OuterObjects;
+		Handler->GetOuterObjects(OuterObjects);
+		TArray<TWeakObjectPtr<UObject>> Owners;
+		if (Handler->GetProperty() == FindFProperty<FProperty>(URPGPrimaryAsset::StaticClass(), TEXT("Id")))
+		{
+			for (UObject* Outer : OuterObjects)
+			{
+				Owners.Add(Outer);
+			}
+		}
+		HeaderRow.NameContent()[Handler->CreatePropertyNameWidget()]
+			.ValueContent().MinDesiredWidth(420).MaxDesiredWidth(650)[SNew(SRPGIdClaimEditor).Owners(Owners)];
+		// The property remains reflection-read-only; only this command widget is interactive.
+		HeaderRow.IsEnabled(true).IsValueEnabled(true)
+			.OverrideResetToDefault(FResetToDefaultOverride::Create(TAttribute<bool>(false)));
+		return;
+	}
 
 	FCoreUObjectDelegates::OnObjectTransacted.AddRaw(this, &FRPGIdCustomization::OnObjectTransacted);
 	
@@ -38,20 +60,10 @@ void FRPGIdCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHa
 		.MaxDesiredWidth(400.0f)
 		[
 			SNew(SHorizontalBox)
-
 				+ SHorizontalBox::Slot()
 				.HAlign(HAlign_Fill)
 				.VAlign(VAlign_Fill)
-				.AutoWidth()
-				[
-					IdHandle->CreatePropertyValueWidget()
-				]
-
-				+ SHorizontalBox::Slot()
-				.HAlign(HAlign_Fill)
-				.VAlign(VAlign_Fill)
-				.AutoWidth()
-				.Padding(FMargin(5.0f, 0.0f, 0.0f, 0.0f))
+				.FillWidth(1.0f)
 				[
 					CreatePropertyEntryBox()
 				]
@@ -97,7 +109,6 @@ void FRPGIdCustomization::CustomizeHeader(TSharedRef<IPropertyHandle> PropertyHa
 					})),
 			LOCTEXT("RPGIdCustomization_RefreshAsset", "Refresh"));
 
-	InitLimitedType();
 	UpdatePropertyEntryBox();
 }
 
@@ -144,25 +155,30 @@ TSharedRef<SWidget> FRPGIdCustomization::CreatePropertyEntryBox()
 		return SNullWidget::NullWidget;
 	}
 	
-	return SAssignNew(PropertyEntryBox, SObjectPropertyEntryBox)
-		.AllowedClass(URPGPrimaryAsset::StaticClass())
+	return SAssignNew(PropertyEntryBox, SRPGIdAssetPicker)
+		.LimitedType(LimitedType)
 		.ObjectPath_Raw(this, &FRPGIdCustomization::GetObjectPath)
 		.OnObjectChanged(this, &FRPGIdCustomization::UpdatePropertyValue)
 		.OnShouldFilterAsset_Lambda([this](const FAssetData& AssetData)
 			{
-				if (!Handler.IsValid() || LimitedType == NAME_None)
+				if (!Handler.IsValid())
 				{
 					return false;
 				}
 
-				const FPrimaryAssetId FoundId = AssetData.GetPrimaryAssetId();
-				if (!FoundId.IsValid())
+				if (LimitedType != NAME_None)
 				{
-					return true;
+					const FPrimaryAssetId FoundId = AssetData.GetPrimaryAssetId();
+					if (!FoundId.IsValid() || FoundId.PrimaryAssetType.GetName() != LimitedType)
+					{
+						return true;
+					}
 				}
-
-				// Check if the found value matches the limited type
-				return FoundId.PrimaryAssetType.GetName() != LimitedType;
+				return false;
+			})
+		.IsEnabled_Lambda([this]()
+			{
+				return Handler->IsEditable();
 			});
 }
 
@@ -195,7 +211,7 @@ void FRPGIdCustomization::InitLimitedType()
 
 void FRPGIdCustomization::UpdatePropertyEntryBox()
 {
-	if (!Handler.IsValid())
+	if (!Handler.IsValid() || Handler->HasMetaData(ID_CLAIM_TAG))
 	{
 		return;
 	}
@@ -232,49 +248,7 @@ void FRPGIdCustomization::UpdatePropertyEntryBox()
 
 	const FPrimaryAssetId AssetId(FName(*RPGId.GetIdTypeString()), RPGId.Id);
 
-	// If handler has metadata for ID_TYPE_TAG, check if the id is already claimed by another asset
-	if (Handler->HasMetaData(ID_CLAIM_TAG))
-	{
-		FAssetData AssetData;
-		if (URPGAssetManager::Get().GetPrimaryAssetData(AssetId, AssetData))
-		{
-			// Check if the handler's outer asset is the same as the one found by RPGId.
-			// We want to prevent self collision where the asset is already claimed by itself.
-			bool bIsSelf = false;
-			TArray<UObject*> OuterObjects;
-			Handler->GetOuterObjects(OuterObjects);
-
-			for (UObject* Outer : OuterObjects)
-			{
-				if (Outer && AssetData.GetObjectPathString() == Outer->GetPathName())
-				{
-					bIsSelf = true;
-					break;
-				}
-			}
-
-			if (!bIsSelf)
-			{
-				if (RPGId.IsValid())
-				{
-					FText ErrorMessage = FText::FromString(FString::Printf(TEXT("%s is already claimed by another asset!"), *RPGId.ToString()));
-					FMessageDialog::Open(EAppMsgType::Ok, ErrorMessage);
-				}
-
-				_Asset.Reset();
-				RPGId.Id = ID_None;
-
-				if (PropertyEntryBox.IsValid())
-				{
-					PropertyEntryBox->Invalidate(EInvalidateWidgetReason::Layout);
-				}
-
-				return;
-			}
-		}
-	}
-
-	TWeakPtr<SObjectPropertyEntryBox> WeakEntryBox = PropertyEntryBox;
+	TWeakPtr<SRPGIdAssetPicker> WeakEntryBox = PropertyEntryBox;
 	TWeakObjectPtr<URPGPrimaryAsset>* WeakAssetRef = &_Asset;
 	URPGAssetManager::Get().LoadPrimaryAsset(
 		AssetId,
@@ -282,7 +256,7 @@ void FRPGIdCustomization::UpdatePropertyEntryBox()
 		FStreamableDelegate::CreateLambda([WeakEntryBox, WeakAssetRef, AssetId]()
 			{
 				// Check if the entry box is still valid
-				TSharedPtr<SObjectPropertyEntryBox> EntryBoxPinned = WeakEntryBox.Pin();
+				TSharedPtr<SRPGIdAssetPicker> EntryBoxPinned = WeakEntryBox.Pin();
 				if (!EntryBoxPinned.IsValid())
 				{
 					return;

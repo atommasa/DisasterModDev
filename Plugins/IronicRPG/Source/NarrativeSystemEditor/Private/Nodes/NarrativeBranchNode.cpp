@@ -13,11 +13,11 @@ TSharedPtr<SGraphNode> UNarrativeBranchNode::CreateVisualWidget()
 
 void UNarrativeBranchNode::AllocateDefaultPins()
 {
-	SetNodeInfo(NewObject<UNarrativeBranchNodeInfo>(this));
+	SetNodeInfoObject(NewObject<UNarrativeBranchNodeInfo>(this));
 	
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, TEXT("True"));
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, TEXT("False"));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Output, TEXT("True"));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Output, TEXT("False"));
 }
 
 bool UNarrativeBranchNode::CanCreateCallableBinding() const
@@ -33,7 +33,7 @@ bool UNarrativeBranchNode::CanCreateCallableBinding() const
 
 UFunction* UNarrativeBranchNode::GetFunctionAsSignature() const
 {
-	return GetNodeInfo()->FindFunctionChecked(GET_FUNCTION_NAME_CHECKED(UNarrativeBranchNodeInfo, IsConditionMet));
+	return GetNarrativeNodeInfo()->FindFunctionChecked(GET_FUNCTION_NAME_CHECKED(UNarrativeBranchNodeInfo, IsConditionMet));
 }
 
 FName UNarrativeBranchNode::CreateCallableBindingName() const
@@ -46,7 +46,7 @@ FText UNarrativeBranchNode::CreateCallableBindingComment() const
 	return FText::FromString(TEXT("Define your own condition logic in this function."));
 }
 
-TSharedRef<SWidget> SNarrativeBranchNode::CreateNarrativeNodeCenterContent()
+TSharedRef<SWidget> SNarrativeBranchNode::CreateNodeNodeCenterContent()
 {
 	UNarrativeBranchNode* BranchNode = Cast<UNarrativeBranchNode>(GraphNode);
 	if (!BranchNode)

@@ -26,9 +26,13 @@ public class GameZoneSystem : ModuleRules
 			new string[]
 			{
 				"Core",
+				"GameplayTags",
                 "RPGCore",
+				"EngineSettings",
+                "RPGFlow",
                 "SaveSystem",
                 "LoadingScreen",
+				"CharacterSystem",
 				// ... add other public dependencies that you statically link with here ...
 			}
 			);

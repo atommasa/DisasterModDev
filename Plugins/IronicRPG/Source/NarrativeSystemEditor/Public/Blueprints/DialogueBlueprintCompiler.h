@@ -1,113 +1,40 @@
+// Copyright Ironic Studio. All Rights Reserved.
+
 #pragma once
 
 #include "CoreMinimal.h"
-#include "KismetCompiler.h"
-#include "KismetCompilerModule.h"
+#include "Compiler/RPGBlueprintCompiler.h"
 #include "Blueprints/DialogueBlueprintGeneratedClass.h"
-#include "EdGraphNode_Comment.h"
-#include "EdGraph/EdGraphNode_Documentation.h"
-#include "Nodes/NarrativeGraphNodeBase.h"
-#include "Nodes/NarrativeNodeKnot.h"
+#include "NarrativeAsset.h"
 
 /**
  * Custom compiler context for Dialogue Blueprints
  */
-class DialogueBlueprintCompiler : public FKismetCompilerContext
+class FDialogueCompilerContext : public FRPGBlueprintCompilerContext
 {
 public:
-    DialogueBlueprintCompiler(UDialogueBlueprint* SourceBP, FCompilerResultsLog& InMessageLog, const FKismetCompilerOptions& CompilerOptions)
-        : FKismetCompilerContext(SourceBP, InMessageLog, CompilerOptions)
-    {
-    }
+    FDialogueCompilerContext(UDialogueBlueprint* SourceBP, FCompilerResultsLog& InMessageLog, const FKismetCompilerOptions& CompilerOptions)
+        : FRPGBlueprintCompilerContext(SourceBP, UDialogueBlueprintGeneratedClass::StaticClass(), InMessageLog, CompilerOptions)
+    {}
 
-    virtual void SpawnNewClass(const FString& NewClassName) override
-    {
-        if (UDialogueBlueprint* DialogueBP = Cast<UDialogueBlueprint>(Blueprint))
-        {
-            NewClass = NewObject<UDialogueBlueprintGeneratedClass>(
-                Blueprint->GetOutermost(),
-                *NewClassName,
-                RF_Public | RF_Transactional
-            );
+    virtual void PreCompile() override;
 
-            NewClass->ClassGeneratedBy = Blueprint;
-        }
-        else
-        {
-            FKismetCompilerContext::SpawnNewClass(NewClassName);
-        }
-    }
+protected:
+    bool EvaluateDialogueCycle(const TSet<UEdGraphNode*>& CycleNodes) const;
+    bool DoesNodeHaveExitFromCycle(UEdGraphNode* PlayerOptionsNode, const TSet<UEdGraphNode*>& CycleNodes) const;
 
-    virtual void OnNewClassSet(UBlueprintGeneratedClass* ClassToUse) override
-    {
-        FKismetCompilerContext::OnNewClassSet(ClassToUse);
-    }
+    void ValidateVariableParsingFunctionFullyMatch(const TSet<FName>& VariableNames) const;
 
-    virtual bool IsNodePure(const UEdGraphNode* Node) const override
-    {
-        if (const UK2Node* K2Node = Cast<const UK2Node>(Node))
-        {
-            return K2Node->IsNodePure();
-        }
-
-        // Only non-K2 nodes are comments, documentation, and narrative graph nodes, which are pure
-        ensure(Node->IsA<UEdGraphNode_Comment>() ||
-            Node->IsA<UEdGraphNode_Documentation>() ||
-            Node->IsA<UNarrativeGraphNodeBase>() ||
-            Node->IsA<UNarrativeNodeKnot>());
-        return true;
-    }
 };
 
 /**
- * Compiler module for Dialogue Blueprints
+ * Compiler for Dialogue Blueprints
  */
-class FDialogueBlueprintCompilerModule : public IBlueprintCompiler
+class FDialogueCompiler : public IBlueprintCompiler
 {
 public:
-    virtual bool CanCompile(const UBlueprint* Blueprint) override
-    {
-        if (!Blueprint)
-        {
-            return false;
-        }
+    virtual bool CanCompile(const UBlueprint* Blueprint) override;
+    virtual void Compile(UBlueprint* Blueprint, const FKismetCompilerOptions& CompileOptions, FCompilerResultsLog& Results) override;
+    virtual bool GetBlueprintTypesForClass(UClass* ParentClass, UClass*& OutBlueprintClass, UClass*& OutBlueprintGeneratedClass) const override;
 
-        if (Blueprint->ParentClass && Blueprint->ParentClass->IsChildOf(UDialogue::StaticClass()))
-        {
-            return true;
-        }
-
-        return false;
-    }
-
-    virtual void Compile(UBlueprint* Blueprint, const FKismetCompilerOptions& CompileOptions, FCompilerResultsLog& Results) override
-    {
-        if (UDialogueBlueprint* DialogueBP = Cast<UDialogueBlueprint>(Blueprint))
-        {
-            TSharedPtr<FKismetCompilerContext> Compiler = MakeShareable(
-                new DialogueBlueprintCompiler(DialogueBP, Results, CompileOptions)
-            );
-            Compiler->Compile();
-        }
-        else
-        {
-            Results.Error(TEXT("Tried to compile a non-Dialogue Blueprint with Dialogue compiler."));
-        }
-    }
-
-    virtual bool GetBlueprintTypesForClass(
-        UClass* ParentClass,
-        UClass*& OutBlueprintClass,
-        UClass*& OutBlueprintGeneratedClass
-    ) const override
-    {
-        if (ParentClass && ParentClass->IsChildOf(UDialogue::StaticClass()))
-        {
-            OutBlueprintClass = UDialogueBlueprint::StaticClass();
-            OutBlueprintGeneratedClass = UDialogueBlueprintGeneratedClass::StaticClass();
-            return true;
-        }
-
-        return false;
-    }
 };

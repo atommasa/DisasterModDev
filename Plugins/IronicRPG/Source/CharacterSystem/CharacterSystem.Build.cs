@@ -28,11 +28,11 @@ public class CharacterSystem : ModuleRules
 			{
 				"Core",
                 "RPGCore",
+				"RPGFlow",
                 "GameplayAbilities",
                 "GameplayTags",
                 "GameplayTasks",
                 "SaveSystem",
-				"RPGAI",
 				"RPGCheatRuntime",
 				// ... add other public dependencies that you statically link with here ...
 			}

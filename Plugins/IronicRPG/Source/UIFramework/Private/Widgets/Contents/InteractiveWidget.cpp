@@ -29,6 +29,26 @@ void UInteractiveWidget::NativeConstruct()
 
 }
 
+void UInteractiveWidget::SetContext(const FInstancedStruct& InContext)
+{
+    Context = InContext;
+}
+
+FInstancedStruct UInteractiveWidget::GetContext() const
+{
+    return Context;
+}
+
+bool UInteractiveWidget::HasContext() const
+{
+    return Context.IsValid();
+}
+
+void UInteractiveWidget::ClearContext()
+{
+    Context.Reset();
+}
+
 void UInteractiveWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
     Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
@@ -74,6 +94,7 @@ void UInteractiveWidget::PlayHover()
         UGameplayStatics::PlaySound2D(this, HoverSound);
     }
 
+    OnHovered();
     OnWidgetHovered.Broadcast(this);
 }
 
@@ -84,6 +105,7 @@ void UInteractiveWidget::PlayUnhover()
         PlayAnimation(HoverAnimation, 0.0f, 1, EUMGSequencePlayMode::Reverse);
     }
 
+    OnUnhovered();
     OnWidgetUnhovered.Broadcast(this);
 }
 
@@ -99,6 +121,7 @@ void UInteractiveWidget::PlayClick()
         UGameplayStatics::PlaySound2D(this, ClickSound);
     }
 
+    OnClicked();
     OnWidgetClicked.Broadcast(this);
 }
 

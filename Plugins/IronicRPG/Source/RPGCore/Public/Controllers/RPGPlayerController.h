@@ -8,18 +8,22 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogPC, Log, All);
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnControlledCharacterChanged);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_TwoParams(
+	FOnControlledCharacterChanged,
+	const ABaseCharacter*, NewCharacter,
+	const ABaseCharacter*, OldCharacter);
 
-UENUM(BlueprintType)
+UENUM(BlueprintType, meta=(Bitflags, UseEnumValuesAsMaskValuesInEditor = "true"))
 enum class ERPGControlMode : uint8
 {
-	None			UMETA(DisplayName = "None"),
-	Gameplay		UMETA(DisplayName = "Gameplay"),
-	UI				UMETA(DisplayName = "UI"),
-	MIXED			UMETA(DisplayName = "Mixed"),
+	None        = 0x00			UMETA(Hidden),
+	Gameplay	= 0x01			UMETA(DisplayName = "Gameplay"),
+	UI			= 0x02			UMETA(DisplayName = "UI"),
+	Mixed		= 0x03			UMETA(DisplayName = "Mixed"), // Gameplay || UI
 };
+ENUM_CLASS_FLAGS(ERPGControlMode);
 
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnControlModeChanged, const ERPGControlMode, NewControlMode);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnControlModeChanged, const int32&, NewControlMode);
 
 /**
  * The PlayerController class is the base class for Player Controllers in the IronicRPG plugin.
@@ -33,21 +37,35 @@ public:
 	ARPGPlayerController(const FObjectInitializer& ObjectInitializer);
 
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 
 public:
-	UFUNCTION(BlueprintCallable, Category = "Controller")
-	virtual void PossessCharacter(APawn* NewCharacter, ERPGControlMode ControlMode = ERPGControlMode::Gameplay);
+	UFUNCTION(BlueprintCallable, Category = "RPG|Controller")
+	virtual void PossessCharacter(APawn* NewCharacter);
+
+	UFUNCTION(BlueprintCallable, Category = "RPG|Controller")
+	virtual void PossessCharacterWithMode(APawn* NewCharacter, ERPGControlMode ControlMode);
 
 	virtual void OnPossess(APawn* InPawn) override;
 	virtual void OnUnPossess() override;
 
-	UFUNCTION(BlueprintCallable, Category = "Controller")
-	virtual void SetControlMode(ERPGControlMode NewControlMode);
+	UFUNCTION(BlueprintCallable, Category = "RPG|Controller")
+	ERPGControlMode GetControlMode() const { return CurrentControlMode; }
+
+	UFUNCTION(BlueprintCallable, Category = "RPG|Controller")
+	void SetControlMode(ERPGControlMode NewControlMode);
 
 public:
 	// Called when the controlled character chenges, provides a delegate for other components to listen to
+	UPROPERTY(BlueprintAssignable, Category = "RPG|Controller")
 	FOnControlledCharacterChanged OnControlledCharacterChanged;
 
 	// Called when the control mode changes
+	UPROPERTY(BlueprintAssignable, Category = "RPG|Controller")
 	FOnControlModeChanged OnControlModeChanged;
+
+protected:
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, DisplayName = "Default Control Mode")
+	ERPGControlMode CurrentControlMode;
+
 };

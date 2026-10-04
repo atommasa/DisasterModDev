@@ -48,7 +48,7 @@ void URPGAssetManager::ScanRPGAssetTypes()
 			FString PhysicalPath = FPaths::ProjectContentDir() / TEXT("DataAssets") / Type.ToString();
 			if (!FPaths::DirectoryExists(PhysicalPath))
 			{
-				UE_LOG(LogTemp, Warning, TEXT("Asset path does not exist try to add folder..."), *PhysicalPath);
+				UE_LOG(LogTemp, Warning, TEXT("Asset path does not exist try to add folder..."));
 
 				// Attempt to create the directory, including any necessary parent directories
 				if (PlatformFile.CreateDirectoryTree(*PhysicalPath))

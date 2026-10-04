@@ -26,8 +26,10 @@ public class RPGGameplay : ModuleRules
 			new string[]
 			{
 				"Core",
+				"GameplayTags",
 				"UMG",
                 "RPGCore",
+				"InteractionSystem",
 				"UIFramework",
                 "SaveSystem",
 				"LoadingScreen",
@@ -43,7 +45,9 @@ public class RPGGameplay : ModuleRules
 			{
 				"CoreUObject",
 				"Engine",
-				"Slate",
+                "EngineSettings",
+				"InputCore",
+                "Slate",
 				"SlateCore",
 				// ... add private dependencies that you statically link with here ...	
 			}

@@ -19,25 +19,24 @@ protected:
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
 
 	virtual void BindAttributeChangedDelegates(UAbilitySystemComponent* AbilitySystemComponent) override;
-	virtual TSet<FGameplayAttribute> GetSaveableAttributes() const override;
 	virtual const FGameplayAttribute GetMaxClampAttribute(const FGameplayAttribute& Attribute) const override;
 
 public: // Level Attributes
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|Level")
 	FGameplayAttributeData Level = 1.0f;
 	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, Level);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Level")
 	FOnAttributeChangedSignature OnLevelChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|Level")
 	FGameplayAttributeData CurrentExp = 1.0f;
 	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, CurrentExp);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Level")
 	FOnAttributeChangedSignature OnCurrentExpChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Level")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|Level")
 	FGameplayAttributeData ExpToNextLevel = 1.0f;
 	ATTRIBUTE_ACCESSORS(ULevelAttributeSet, ExpToNextLevel);
 

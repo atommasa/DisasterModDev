@@ -2,6 +2,7 @@
 
 
 #include "RPGIdGraphPin.h"
+#include "SRPGIdAssetPicker.h"
 
 #include "Assets/RPGPrimaryAsset.h"
 #include "Assets/RPGAssetManager.h"
@@ -36,6 +37,8 @@ void SRPGIdGraphPin::Construct(const FArguments& InArgs, UEdGraphPin* InGraphPin
 {
 	SGraphPin::Construct(SGraphPin::FArguments(), InGraphPinObj);
 
+	IdPin = InGraphPinObj;
+
 	InitLimitedType();
 	UpdatePropertyEntryBox();
 }
@@ -47,25 +50,37 @@ TSharedRef<SWidget> SRPGIdGraphPin::GetDefaultValueWidget()
 
 TSharedRef<SWidget> SRPGIdGraphPin::CreatePropertyEntryBox()
 {
-	return SAssignNew(PropertyEntryBox, SObjectPropertyEntryBox)
-		.AllowedClass(URPGPrimaryAsset::StaticClass())
+	SAssignNew(PropertyEntryBox, SRPGIdAssetPicker)
+		.LimitedType(LimitedType)
 		.ObjectPath_Raw(this, &SRPGIdGraphPin::GetObjectPath)
 		.OnObjectChanged(this, &SRPGIdGraphPin::UpdatePinValue)
 		.OnShouldFilterAsset_Lambda([this](const FAssetData& AssetData)
 			{
-				if (LimitedType == NAME_None)
+				if (LimitedType != NAME_None)
 				{
-					return false;
+					const FPrimaryAssetId FoundId = AssetData.GetPrimaryAssetId();
+					if (!FoundId.IsValid() || FoundId.PrimaryAssetType.GetName() != LimitedType)
+					{
+						return true;
+					}
 				}
 
-				const FPrimaryAssetId FoundId = AssetData.GetPrimaryAssetId();
-				if (!FoundId.IsValid())
-				{
-					return true;
-				}
-
-				return FoundId.PrimaryAssetType.GetName() != LimitedType;
+				return false;
 			});
+
+	return SNew(SBox)
+		.Visibility_Lambda([this]()
+			{
+				if (!IdPin)
+				{
+					return EVisibility::Collapsed;
+				}
+
+				return !IdPin->HasAnyConnections() ? EVisibility::Visible : EVisibility::Collapsed;
+			})
+		[
+			PropertyEntryBox.ToSharedRef()
+		];
 }
 
 FRPGId SRPGIdGraphPin::GetCurrentRPGId() const
@@ -185,7 +200,7 @@ void SRPGIdGraphPin::UpdatePropertyEntryBox()
 		RPGId.Id
 	);
 
-	TWeakPtr<SObjectPropertyEntryBox> WeakEntryBox = PropertyEntryBox;
+	TWeakPtr<SRPGIdAssetPicker> WeakEntryBox = PropertyEntryBox;
 	TWeakObjectPtr<URPGPrimaryAsset>* WeakAssetRef = &Asset;
 
 	URPGAssetManager::Get().LoadPrimaryAsset(
@@ -193,7 +208,7 @@ void SRPGIdGraphPin::UpdatePropertyEntryBox()
 		{},
 		FStreamableDelegate::CreateLambda([WeakEntryBox, WeakAssetRef, AssetId]()
 			{
-				TSharedPtr<SObjectPropertyEntryBox> EntryBoxPinned = WeakEntryBox.Pin();
+				TSharedPtr<SRPGIdAssetPicker> EntryBoxPinned = WeakEntryBox.Pin();
 				if (!EntryBoxPinned.IsValid())
 				{
 					return;

@@ -21,8 +21,7 @@ public: // UEdGraphNode interface
 	virtual void AllocateDefaultPins() override;
 
 public: // UNarrativeGraphNode interface
-	virtual ENarrativeNodeType GetNarrativeNodeType() const override { return ENarrativeNodeType::StartNode; }
-	virtual UEdGraphPin* CreateNarrativePin(EEdGraphPinDirection Direction, FName PinName) override;
+	virtual UEdGraphPin* CreateRPGGraphPin(EEdGraphPinDirection Direction, FName InPinName) override;
 
 };
 

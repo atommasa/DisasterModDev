@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UObject/NoExportTypes.h"
 #include "Narrative/SpeakerData.h"
+#include "Narrative/DialogueDataTypes.h"
 #include "Dialogue.generated.h"
 
 /**
@@ -24,4 +25,13 @@ public:
     UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "Speakers")
     TArray<FSpeakerData> Speakers;
 
+public:
+	UFUNCTION(BlueprintNativeEvent)
+	FText GetDialogueVariable(const UNarrativeNodeInfo* NodeInfo, const FDialogueLine& DialogueLine, const FName& VariableName);
+	virtual FText GetDialogueVariable_Implementation(const UNarrativeNodeInfo* NodeInfo, const FDialogueLine& DialogueLine, const FName& VariableName) { return FText(); }
+
+#if WITH_EDITOR
+public:
+
+#endif // WITH_EDITOR
 };

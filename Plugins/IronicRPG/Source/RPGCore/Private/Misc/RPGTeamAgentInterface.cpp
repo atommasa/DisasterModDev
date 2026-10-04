@@ -2,7 +2,7 @@
 
 
 #include "Misc/RPGTeamAgentInterface.h"
-#include "RPGSettings.h"
+#include "Settings/CharacterSystemSettings.h"
 
 UE_DEFINE_GAMEPLAY_TAG_COMMENT(Team_ROOT, "Team", "Root tag for all team tags. You can add subtags under Ally, Enemy, and Neutral to create more specific team tags. It is not recommended to add tags directly under the root tag, as it may cause unintended relationships between teams.")
 UE_DEFINE_GAMEPLAY_TAG_COMMENT(Team_Ally, "Team.Ally", "This tag is used to identify allies.")
@@ -35,13 +35,13 @@ ETeamAttitude::Type IRPGTeamAgentInterface::GetTeamAttitudeTowards(const IRPGTea
 		return ETeamAttitude::Neutral;
 	}
 
-	const URPGSettings* RPGSettings = URPGSettings::GetRPGSettings();
-	if (!RPGSettings)
+	const UCharacterSystemSettings* Settings = GetDefault<UCharacterSystemSettings>();
+	if (!Settings)
 	{
 		return ETeamAttitude::Neutral;
 	}
 
-	const FTeamRelationInfo* RelationInfo = FTeamRelationInfo::FindTeamRelationInfoInMap(RPGSettings->TeamRelations, GetTeamTag());
+	const FTeamRelationInfo* RelationInfo = FTeamRelationInfo::FindTeamRelationInfoInMap(Settings->TeamRelations, GetTeamTag());
 	if (!RelationInfo)
 	{
 		return ETeamAttitude::Neutral;

@@ -50,18 +50,9 @@ void FCharacterSaveDataCustomization::CustomizeChildren(TSharedRef<IPropertyHand
             {
 				LearnedAbilitiesHandle = ChildHandle;
             }
-            else if (ChildHandle->GetProperty()->GetFName() == GET_MEMBER_NAME_CHECKED(FCharacterSaveData, EquippedAbilities))
-            {
-				EquippedAbilitiesHandle = ChildHandle;
-
-                // Customize Equipped Abilities Section
-                CostomizeEquippedAbilitiesSection(ChildBuilder);
-
-				continue;
-            }
             else if (ChildHandle->GetProperty()->GetFName() == GET_MEMBER_NAME_CHECKED(FCharacterSaveData, Attributes))
             {
-				CostomizeAttributesSection(ChildBuilder, ChildHandle.ToSharedRef());
+				CostomizeEntryIdSection(ChildBuilder, ChildHandle.ToSharedRef());
                 continue;
 			}
 
@@ -107,185 +98,7 @@ void FCharacterSaveDataCustomization::UpdateLearnedOptions()
     }
 }
 
-void FCharacterSaveDataCustomization::CostomizeEquippedAbilitiesSection(IDetailChildrenBuilder& ChildBuilder)
-{
-    if (!EquippedAbilitiesHandle.IsValid() || !EquippedAbilitiesHandle->IsValidHandle())
-    {
-        return;
-    }
-
-    const URPGSettings* RPGSettings = URPGSettings::GetRPGSettings();
-    check(RPGSettings);
-
-    const UEnum* AbilitySlotEnum = Cast<UEnum>(RPGSettings->AbilityInputEnum.TryLoad());
-	if (!AbilitySlotEnum)
-    {
-		UE_LOG(LogTemp, Warning, TEXT("[FCharacterSaveDataCustomization::CostomizeEquippedAbilitiesSection] Failed to load Ability Input Enum."));
-        return;
-	}
-
-	const int32 MaxSlots = AbilitySlotEnum->NumEnums() - 1; // Need to exclude the _MAX entry
-
-    TSharedPtr<IPropertyHandleMap> Map = EquippedAbilitiesHandle->AsMap();
-    if (!Map.IsValid())
-    {
-        return;
-    }
-
-	// Ensure all slots exist
-    TSet<int32> ExistingKeys;
-    {
-        uint32 Num = 0;
-        Map->GetNumElements(Num);
-
-        for (uint32 i = 0; i < Num; ++i)
-        {
-            TSharedRef<IPropertyHandle> Element = Map->GetElement(i);
-            TSharedPtr<IPropertyHandle> KeyHandle = Element->GetKeyHandle();
-            int32 Key = INDEX_NONE;
-
-            if (KeyHandle.IsValid() && KeyHandle->GetValue(Key) == FPropertyAccess::Success)
-            {
-                ExistingKeys.Add(Key);
-            }
-        }
-    }
-
-    for (int32 SlotKey = 0; SlotKey < MaxSlots; ++SlotKey)
-    {
-        if (ExistingKeys.Contains(SlotKey))
-        {
-            continue;
-        }
-
-        Map->AddItem();
-
-        uint32 Num = 0;
-        Map->GetNumElements(Num);
-        TSharedRef<IPropertyHandle> NewElement = Map->GetElement(Num - 1);
-
-        if (TSharedPtr<IPropertyHandle> KeyHandle = NewElement->GetKeyHandle())
-        {
-            KeyHandle->SetValue(SlotKey + 1);
-        }
-    }
-
-    for (int32 SlotKey = 0; SlotKey < MaxSlots; ++SlotKey)
-    {
-        TSharedRef<IPropertyHandle> ExistingElement = Map->GetElement(SlotKey);
-
-        if (TSharedPtr<IPropertyHandle> KeyHandle = ExistingElement->GetKeyHandle())
-        {
-            KeyHandle->SetValue(SlotKey);
-		}
-    }
-
-	// Now build UI
-    IDetailGroup& Group = ChildBuilder.AddGroup(
-        GET_MEMBER_NAME_CHECKED(FCharacterSaveData, EquippedAbilities),
-        FText::FromString("Default Equipped Abilities"),
-        true);
-
-    for (int32 SlotIndex = 0; SlotIndex < MaxSlots; ++SlotIndex)
-    {
-        TSharedPtr<IPropertyHandle> ValueHandle;
-        {
-            uint32 Num = 0;
-            Map->GetNumElements(Num);
-            for (uint32 i = 0; i < Num; ++i)
-            {
-                TSharedRef<IPropertyHandle> Element = Map->GetElement(i);
-                TSharedPtr<IPropertyHandle> KeyHandle = Element->GetKeyHandle();
-
-                int32 Key = INDEX_NONE;
-                if (KeyHandle.IsValid() && KeyHandle->GetValue(Key) == FPropertyAccess::Success && Key == SlotIndex)
-                {
-                    ValueHandle = Element;
-                    break;
-                }
-            }
-        }
-
-        if (!ValueHandle.IsValid())
-        {
-            continue;
-        }
-
-		// Get Id Handle
-        TSharedPtr<IPropertyHandle> IdHandle = ValueHandle->GetChildHandle(GET_MEMBER_NAME_CHECKED(FRPGId, Id));
-        if (!IdHandle.IsValid())
-        {
-            continue;
-        }
-
-        Group.AddWidgetRow()
-            .NameContent()
-            [
-                SNew(STextBlock).Text(FText::FromString(FString::Printf(TEXT("Ability Slot: %s"), *AbilitySlotEnum->GetDisplayNameTextByIndex(SlotIndex).ToString())))
-            ]
-            .ValueContent()
-            .MinDesiredWidth(450.f)
-            [
-                SNew(SObjectPropertyEntryBox)
-                    .AllowedClass(UAbilityAsset::StaticClass())
-
-                    .ObjectPath_Lambda([IdHandle]() -> FString
-                        {
-                            FName IdName;
-                            if (IdHandle->GetValue(IdName) != FPropertyAccess::Success || IdName.IsNone())
-                            {
-                                return TEXT("");
-                            }
-
-                            const FPrimaryAssetId AssetId(TEXT("Ability"), IdName);
-
-                            const FSoftObjectPath Path = UAssetManager::Get().GetPrimaryAssetPath(AssetId);
-                            return Path.IsValid() ? Path.ToString() : TEXT("");
-                        })
-
-                    .OnObjectChanged_Lambda([IdHandle](const FAssetData& SelectedAsset)
-                        {
-                            if (!IdHandle.IsValid())
-                            {
-                                return;
-                            }
-
-                            if (!SelectedAsset.IsValid())
-                            {
-                                IdHandle->SetValue(NAME_None);
-                                return;
-                            }
-
-                            const FPrimaryAssetId AssetId = SelectedAsset.GetPrimaryAssetId();
-                            if (!AssetId.IsValid())
-                            {
-                                return;
-                            }
-
-                            const FName NewName = AssetId.PrimaryAssetName;
-                            IdHandle->SetValue(NewName);
-                        })
-
-                    .OnShouldFilterAsset_Lambda([this](const FAssetData& AssetData)
-                        {
-                            UpdateLearnedOptions();
-
-                            const FPrimaryAssetId FoundId = AssetData.GetPrimaryAssetId();
-                            if (!FoundId.IsValid())
-                            {
-                                return true;
-                            }
-
-                            const FRPGId Target = FRPGId(FoundId.PrimaryAssetName);
-                            return !LearnedOptions.ContainsByPredicate(
-                                [&Target](const TSharedPtr<FRPGId>& P) { return P.IsValid() && *P == Target; }
-                            );
-                        })
-            ];
-    }
-}
-
-void FCharacterSaveDataCustomization::CostomizeAttributesSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle)
+void FCharacterSaveDataCustomization::CostomizeEntryIdSection(IDetailChildrenBuilder& ChildBuilder, TSharedRef<IPropertyHandle> ChildHandle)
 {
     TArray<UClass*> Classes;
     GetDerivedClasses(URPGAttributeSet::StaticClass(), Classes);
@@ -298,7 +111,10 @@ void FCharacterSaveDataCustomization::CostomizeAttributesSection(IDetailChildren
 
         if (URPGAttributeSet* AttributeSet = Class->GetDefaultObject<URPGAttributeSet>())
         {
-            for (const FGameplayAttribute& Attribute : AttributeSet->GetSaveableAttributes())
+            TSet<FGameplayAttribute> Saveables;
+            AttributeSet->GetSaveableAttributes(Saveables);
+
+            for (const FGameplayAttribute& Attribute : Saveables)
             {
                 Group.AddWidgetRow()
                     .NameContent()

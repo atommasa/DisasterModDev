@@ -53,10 +53,8 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = "Branch", meta=(EditCondition = "ImplementationType == EConditionImplementationType::CIT_ConditionObject", EditConditionHides))
 	bool bInverse = false;
 
-	/*UPROPERTY(EditAnywhere, Category = "Branch", meta=(EditCondition = "ImplementationType == EConditionImplementationType::CIT_ConditionFunction", EditConditionHides))*/
-
 public:
-	UFUNCTION(BlueprintImplementableEvent, Category = "Branch")
+	UFUNCTION(BlueprintImplementableEvent)
 	bool IsConditionMet() const;
 
 };

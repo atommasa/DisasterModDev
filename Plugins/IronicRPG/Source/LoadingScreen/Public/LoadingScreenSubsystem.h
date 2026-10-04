@@ -3,7 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Subsystems/GameInstanceSubsystem.h"
+#include "Subsystems/RPGGameInstanceSubsystem.h"
+#include "Containers/Ticker.h"
+#include "Controllers/RPGPlayerController.h"
 #include "LoadingScreenSubsystem.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLoadingScreenStop);
@@ -11,21 +13,18 @@ DECLARE_DYNAMIC_MULTICAST_DELEGATE(FOnLoadingScreenStop);
 /**
  * A subsystem to manage loading screens within the game instance.
  */
-UCLASS(Abstract, Blueprintable)
-class LOADINGSCREEN_API ULoadingScreenSubsystem : public UGameInstanceSubsystem
+UCLASS(Blueprintable)
+class LOADINGSCREEN_API ULoadingScreenSubsystem : public URPGGameInstanceSubsystem
 {
 	GENERATED_BODY()
 
 public:
-	static ULoadingScreenSubsystem* Get(const UObject* WorldContextObject);
-
-public:
 	// The widget class to use for the loading screen.
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Loading Screen")
-    TSubclassOf<UUserWidget> LoadingScreenWidgetClass;
+    TSubclassOf<class UWidgetBase> LoadingScreenWidgetClass;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Loading Screen")
-	TWeakObjectPtr<UUserWidget> LoadingScreenWidget = nullptr;
+	UPROPERTY(Transient, BlueprintReadOnly, Category = "Loading Screen")
+	TWeakObjectPtr<class UWidgetBase> LoadingScreenWidget = nullptr;
 
 	// The minimum time the loading screen should be displayed.
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "Loading Screen")
@@ -40,10 +39,11 @@ public:
     UFUNCTION(BlueprintCallable, Category = "Loading Screen")
     void StopLoadingScreen();
 
-	FOnLoadingScreenStop OnLoadingScreenStop;
+	// Is loading?
+	UFUNCTION(BlueprintCallable, Category = "Loading Screen")
+	bool IsLoading() const { return bIsLoading; }
 
-protected:
-	void EndLoadingScreen();
+	FOnLoadingScreenStop OnLoadingScreenStop;
 
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Loading Screen")
@@ -54,5 +54,19 @@ protected:
 
 	UPROPERTY(BlueprintReadOnly, Category = "Loading Screen")
 	bool bRequestedStop = false;
+
+protected:
+	double LoadingScreenStartTime = 0.0;
+
+	FTSTicker::FDelegateHandle MinimumDisplayTickerHandle;
+
+	void EndLoadingScreen();
+	void TryEndLoadingScreen();
+	void ClearMinimumDisplayTicker();
+
+private:
+	TSharedPtr<SWidget> LoadingScreenViewportContent;
+
+	ERPGControlMode SavedControlMode;
 
 };

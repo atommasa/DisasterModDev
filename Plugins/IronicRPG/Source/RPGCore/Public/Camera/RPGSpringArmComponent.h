@@ -9,7 +9,7 @@
 /**
  * 
  */
-UCLASS()
+UCLASS(ClassGroup = Camera, meta = (BlueprintSpawnableComponent), hideCategories = (Mobility))
 class RPGCORE_API URPGSpringArmComponent : public USpringArmComponent
 {
 	GENERATED_BODY()

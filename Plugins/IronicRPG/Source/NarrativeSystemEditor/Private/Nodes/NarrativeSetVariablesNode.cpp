@@ -11,13 +11,13 @@ TSharedPtr<SGraphNode> UNarrativeSetVariablesNode::CreateVisualWidget()
 
 void UNarrativeSetVariablesNode::AllocateDefaultPins()
 {
-	SetNodeInfo(NewObject<UNarrativeSetVariablesNodeInfo>(this));
+	SetNodeInfoObject(NewObject<UNarrativeSetVariablesNodeInfo>(this));
 
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Output, TEXT(""));
 }
 
-TSharedRef<SWidget> SNarrativeSetVariablesNode::CreateNarrativeNodeCenterContent()
+TSharedRef<SWidget> SNarrativeSetVariablesNode::CreateNodeNodeCenterContent()
 {
 	UNarrativeSetVariablesNode* SetVariablesNode = Cast<UNarrativeSetVariablesNode>(GraphNode);
 	if (!SetVariablesNode)

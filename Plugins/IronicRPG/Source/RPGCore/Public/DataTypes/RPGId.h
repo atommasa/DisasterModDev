@@ -28,6 +28,8 @@ struct RPGCORE_API FRPGId
 	bool IsValid() const { return Id.IsValid() && !Id.IsNone(); }
 
 	FString ToString() const { return Id.ToString(); }
+
+	FPrimaryAssetId ToPrimaryAssetId() const { return FPrimaryAssetId(FName(GetIdTypeString()), Id); }
 	
 	int32 GetNumeric() const;
 	

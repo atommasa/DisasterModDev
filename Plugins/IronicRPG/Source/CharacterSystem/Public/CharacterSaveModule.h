@@ -16,7 +16,7 @@ struct CHARACTERSYSTEM_API FCharacterSaveModule
     TMap<FRPGId, FCharacterSaveData> CharacterData;
 
     UPROPERTY(SaveGame)
-    int32 PlayerPartyIndex;
+    int32 PlayerPartyIndex = 0;
 
     UPROPERTY(SaveGame)
     TArray<FRPGId> PartyMembers;

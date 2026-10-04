@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "DataTypes/RPGId.h"
 #include "Levels/GameZoneContext.h"
+#include "Levels/GameZonePointData.h"
 #include "GameZoneSaveModule.generated.h"
 
 USTRUCT(BlueprintType)
@@ -14,4 +15,7 @@ struct GAMEZONESYSTEM_API FGameZoneSaveModule
 
     UPROPERTY(SaveGame)
     FGameZoneContext CurrentContext;
+
+    UPROPERTY(SaveGame)
+    TMap<FGuid, FGameZonePointData> PointOverrides;
 };

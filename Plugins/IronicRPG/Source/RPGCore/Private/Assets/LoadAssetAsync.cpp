@@ -2,12 +2,28 @@
 
 
 #include "Assets/LoadAssetAsync.h"
+#include "Assets/RPGAssetLibrary.h"
 
-ULoadAssetAsync* ULoadAssetAsync::LoadAssetById(FName AssetType, const FRPGId& Id)
+ULoadAssetAsync* ULoadAssetAsync::LoadAssetAsync(const FRPGId& InId, const TArray<FName> InBundles)
 {
-	return nullptr;
+	ULoadAssetAsync* BPNode = NewObject<ULoadAssetAsync>();
+	BPNode->Id = InId;
+	BPNode->Bundles = InBundles;
+
+	return BPNode;
 }
 
 void ULoadAssetAsync::Activate()
 {
+	URPGAssetLibrary::LoadAssetByRPGIdAsync(Id, Bundles, [this](URPGPrimaryAsset* Asset)
+		{
+			if (Asset)
+			{
+				OnSuccess.Broadcast(Asset);
+			}
+			else
+			{
+				OnFailure.Broadcast(nullptr);
+			}
+		});
 }

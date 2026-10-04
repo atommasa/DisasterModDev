@@ -3,7 +3,6 @@
 #pragma once
 
 #include "CoreMinimal.h"
-#include "Nodes/NarrativeNodeType.h"
 #include "NarrativeTextParser.generated.h"
 
 /**

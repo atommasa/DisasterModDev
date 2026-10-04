@@ -16,8 +16,6 @@
 
 #include "GameZoneSubsystem.h"
 
-#include "UISubsystem.h"
-
 #include "LoadingScreenSubsystem.h"
 
 #include "RPGGameMode.generated.h"
@@ -32,65 +30,46 @@ class RPGGAMEPLAY_API ARPGGameMode : public AGameModeBase
 {
 	GENERATED_BODY()
 
+public:
+	ARPGGameMode(const FObjectInitializer& ObjectInitializer);
+
 protected:
 	virtual void InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage) override;
-	virtual void BeginPlay() override;
+	virtual void StartPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
+
+	virtual void GetSeamlessTravelActorList(bool bToTransition, TArray<AActor*>& ActorList) override;
+	virtual void PostSeamlessTravel() override;
+
+	virtual AActor* ChoosePlayerStart_Implementation(AController* Player) override;
 
 public:
+	UFUNCTION(BlueprintPure, Category = "RPG|Game", meta=(WorldContext = "WorldContextObject"))
+	static ARPGGameMode* GetRPGGameMode(UObject* WorldContextObject);
+
 	// Start the game from the menu
-	UFUNCTION(BlueprintCallable, Category = "Game")
+	UFUNCTION(BlueprintCallable, Category = "RPG|Game")
 	virtual void StartGameSession(const FString& SlotName = TEXT(""));
 
-	UFUNCTION(BlueprintCallable, Category = "Game")
-	virtual void TeleportTo(const FGameZoneContext& NewGameZoneContext);
+	UFUNCTION(BlueprintCallable, Category = "RPG|Game")
+	virtual void RequestTeleportTo(const FGameZoneContext& NewContext);
 
-	UFUNCTION(BlueprintCallable, Category = "Game")
+	UFUNCTION(BlueprintCallable, Category = "RPG|Game")
 	virtual void AwakenSpawnablePoints();
 
 protected:
-	// Called after a save game is loaded
-	UFUNCTION(BlueprintNativeEvent)
-	void OnSaveGameLoaded();
-	virtual void OnSaveGameLoaded_Implementation();
+	UFUNCTION(BlueprintNativeEvent, Category = "RPG|LoadingScreen")
+	void PostStartGameSession();
+	virtual void PostStartGameSession_Implementation() {}
 
-	UPROPERTY(BlueprintReadOnly, Category = "Game")
+protected:
+	UPROPERTY(BlueprintReadOnly, Category = "RPG|Game")
 	USaveGameSubsystem* SaveSubsystem;
 
-protected:
-	UPROPERTY(BlueprintReadOnly, Category = "Game")
+	UPROPERTY(BlueprintReadOnly, Category = "RPG|Game")
 	UGameZoneSubsystem* GameZoneSubsystem;
 
-protected:
-	UPROPERTY(BlueprintReadOnly, Category = "MainMenu")
-	UUISubsystem* UISubsystem;
-
-	UFUNCTION(BlueprintNativeEvent, Category = "MainMenu")
-	void CreateMainMenuWidget();
-	virtual void CreateMainMenuWidget_Implementation();
-
-	// Called when the menu is initialized
-	UFUNCTION(BlueprintImplementableEvent, Category = "MainMenu")
-	void OnMainMenuInitialized();
-
-	UPROPERTY(EditDefaultsOnly, Category = "MainMenu")
-	TSubclassOf<class UMenuBase> MainMenuWidgetClass;
-
-	UPROPERTY(BlueprintReadWrite, Category = "MainMenu")
-	TWeakObjectPtr<class UMenuBase> MainMenuWidget;
-
-protected:
-	UPROPERTY(BlueprintReadOnly, Category = "LoadingScreen")
-	ULoadingScreenSubsystem* LoadingScreenSubsystem;
-
-	UFUNCTION(BlueprintNativeEvent, Category = "Loading")
-	void OnStoppedLoading();
-	virtual void OnStoppedLoading_Implementation();
-
-protected:
-	UPROPERTY(BlueprintReadOnly, Category = "Character")
+	UPROPERTY(BlueprintReadOnly, Category = "RPG|Character")
 	UCharacterSubsystem* CharacterSubsystem;
-
-	UFUNCTION()
-	void OnPartyReady();
 
 };

@@ -49,5 +49,6 @@ class NARRATIVESYSTEMRUNTIME_API UDialogueBlueprint : public UNarrativeBlueprint
 	GENERATED_BODY()
 	
 public:
-
+	static FName DialogueGraphName;
+	static FName DialogueEventGraphName;
 };

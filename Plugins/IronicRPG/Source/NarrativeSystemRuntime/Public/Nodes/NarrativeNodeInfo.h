@@ -6,7 +6,7 @@
 #include "UObject/NoExportTypes.h"
 #include "NarrativeNodeInfo.generated.h"
 
-DECLARE_MULTICAST_DELEGATE_OneParam(FOnNodeInfoPropertyChanged, const FPropertyChangedChainEvent&);
+DECLARE_MULTICAST_DELEGATE(FOnNodeInfoPropertyChanged);
 
 UENUM(BlueprintType)
 enum class EDialogueEventType : uint8

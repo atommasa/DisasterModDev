@@ -2,6 +2,8 @@
 .vs/
 .vscode/
 *.sln
+*.slnx
+UpgradeLog.htm
 *.suo
 *.opensdf
 *.sdf
@@ -23,9 +25,7 @@ Plugins/**/Intermediate/
 Saved/
 Plugins/**/Saved/
 
-# UE External Actors / External Objects (UE5)
-Content/__ExternalActors__/
-Content/__ExternalObjects__/
+# World Partition external actors/objects are source assets and must be tracked.
 Content/Developers/
 Content/Collections/
 
@@ -51,3 +51,5 @@ Thumbs.db
 *.so
 *.dll
 *.lib
+# Packaged Windows output
+/Windows/

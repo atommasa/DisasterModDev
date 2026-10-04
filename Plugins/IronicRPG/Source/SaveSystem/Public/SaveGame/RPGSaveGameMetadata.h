@@ -3,17 +3,8 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "SaveGame/RPGSaveGameVersion.h"
 #include "RPGSaveGameMetadata.generated.h"
-
-namespace ERPGSaveGameVersion
-{
-    enum Type
-    {
-        Initial,
-        VersionPlusOne,
-        LatestVersion = VersionPlusOne - 1
-    };
-}
 
 /**
  * The matedata for identifying save game information.
@@ -26,7 +17,7 @@ struct SAVESYSTEM_API FRPGSaveGameMetadata
     GENERATED_BODY()
 
     UPROPERTY()
-    uint16 SaveDataVersion = ERPGSaveGameVersion::LatestVersion;
+    uint16 SaveDataVersion = ERPGSaveGameVersion::InitialRelease;
 
     UPROPERTY(BlueprintReadOnly)
 	FString SaveSlotName;

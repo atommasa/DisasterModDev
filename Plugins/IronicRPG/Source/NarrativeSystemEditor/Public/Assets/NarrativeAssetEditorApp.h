@@ -96,7 +96,7 @@ public:
 
 protected:
 	void UpdateWorkingAssetFromGraph();
-	void RebuildEditorGraphFromRuntimeGraph();
+	// void RebuildEditorGraphFromRuntimeGraph();
 	class UNarrativeGraphNodeBase* GetSelectedNode(const FGraphPanelSelectionSet& Selection);
 
 	/** The command list for this editor */

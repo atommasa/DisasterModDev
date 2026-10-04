@@ -10,13 +10,13 @@ TSharedPtr<SGraphNode> UNarrativeCutsceneNode::CreateVisualWidget()
 
 void UNarrativeCutsceneNode::AllocateDefaultPins()
 {
-	SetNodeInfo(NewObject<UNarrativeCutsceneNodeInfo>(this));
+	SetNodeInfoObject(NewObject<UNarrativeCutsceneNodeInfo>(this));
 
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
-	CreateNarrativePin(EEdGraphPinDirection::EGPD_Output, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Input, TEXT(""));
+	CreateRPGGraphPin(EEdGraphPinDirection::EGPD_Output, TEXT(""));
 }
 
-TSharedRef<SWidget> SNarrativeCutsceneNode::CreateNarrativeNodeCenterContent()
+TSharedRef<SWidget> SNarrativeCutsceneNode::CreateNodeNodeCenterContent()
 {
 	UNarrativeCutsceneNode* CutsceneNode = Cast<UNarrativeCutsceneNode>(GraphNode);
 	if (!CutsceneNode)

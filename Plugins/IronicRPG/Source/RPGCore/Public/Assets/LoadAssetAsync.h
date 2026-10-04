@@ -8,7 +8,7 @@
 #include "LoadAssetAsync.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAssetLoaded, URPGPrimaryAsset*, LoadedAsset);
-DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAssetFailed, FName, AssetType);
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnAssetFailed, URPGPrimaryAsset*, LoadedAsset);
 
 /**
  * 
@@ -25,8 +25,8 @@ public:
 	 * @param AssetType The type of the asset (e.g., "Character", "Item").
 	 * @param Id The unique identifier for the asset.
 	 */
-	UFUNCTION(BlueprintCallable, Category = "Asset", meta = (BlueprintInternalUseOnly = "true"))
-	static ULoadAssetAsync* LoadAssetById(FName AssetType, const FRPGId& Id);
+	UFUNCTION(BlueprintCallable, Category = "Asset", meta=(BlueprintInternalUseOnly = "true", AutoCreateRefTerm = "InBundles"))
+	static ULoadAssetAsync* LoadAssetAsync(const FRPGId& InId, TArray<FName> InBundles);
 
 	virtual void Activate() override;
 
@@ -35,5 +35,12 @@ public:
 
 	UPROPERTY(BlueprintAssignable)
 	FOnAssetFailed OnFailure;
+
+protected:
+	UPROPERTY()
+	FRPGId Id;
+
+	UPROPERTY()
+	TArray<FName> Bundles;
 
 };

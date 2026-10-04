@@ -24,7 +24,6 @@ public: // UEdGraphNode interface
 	virtual void AllocateDefaultPins() override;
 
 public: // UNarrativeGraphNodeBase interface
-	virtual ENarrativeNodeType GetNarrativeNodeType() const override { return ENarrativeNodeType::DialogueNode; }
 	virtual ECallableBindingType GetCallableBindingType() const override { return ECallableBindingType::CBT_Event; }
 	
 private: // UNarrativeDialogueNode interface
@@ -49,21 +48,18 @@ public:
 
 		TitleColor = FColor::Purple;
 
-		BindPropertyChangeToNodeInfo(&SNarrativeDialogueNode::OnNodeInfoPropertyChanged);
-
 		UpdateGraphNode();
 	}
 
-	virtual TSharedRef<SWidget> CreateNarrativeTitleWidget() override;
+	virtual TSharedRef<SWidget> CreateNodeTitleWidget() override;
 
-	virtual TSharedRef<SWidget> CreateNarrativeNodeCenterContent() override;
+	virtual TSharedRef<SWidget> CreateNodeNodeCenterContent() override;
 
 	virtual TSharedRef<SWidget> CreateTitleComboButtonMenuContent();
 
 	virtual TSharedRef<SWidget> CreatePreviewTextBlock();
 
 protected:
-	UFUNCTION()
 	virtual FText GetEditableDialogueText() const;
 
 protected:
@@ -73,8 +69,6 @@ protected:
 	virtual float GetWrapTextPixel() const { return DialogueTextBoxWidth - DialogueTextSize * 2.0f; }
 
 protected:
-	void OnNodeInfoPropertyChanged(const FPropertyChangedChainEvent& PropertyChangedChainEvent) { UpdateGraphNode(); }
-
 	TSharedPtr<SWidget> PreviewTextBlock;
 
 };

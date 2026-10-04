@@ -6,7 +6,7 @@
 #include "Controllers/BaseControlComponent.h"
 #include "CharacterControlComponent.generated.h"
 
-class APlayableCharacter;
+class ABaseCharacter;
 class URPGCharacterMovementComponent;
 
 class UInputMappingContext;
@@ -29,14 +29,10 @@ public:
 		
 protected:
 	UPROPERTY(BlueprintReadOnly, Category = "Character")
-	APlayableCharacter* ControlledCharacter = nullptr;
+	ABaseCharacter* ControlledCharacter = nullptr;
 
 	UPROPERTY(BlueprintReadOnly, Category = "Character")
 	URPGCharacterMovementComponent* CharacterMovement = nullptr;
-
-public:
-	virtual void EnableAllInputs() override;
-	virtual void DisableAllInputs() override;
 
 protected:
 	// Look input handler
@@ -70,11 +66,6 @@ protected:
 	virtual void Sprint_Implementation(const FInputActionValue& Value);
 
 protected: // Ehanced Input
-	// Input mapping context
-	UPROPERTY(EditDefaultsOnly, Category = "Input")
-	UInputMappingContext* MoveContext = nullptr;
-	DEFINE_INPUTMAPPING_FUNCTIONS(InputSubsystem, MoveContext, ControlPriority)
-
 	// Action to look around
 	UPROPERTY(EditDefaultsOnly, Category = "Input")
 	UInputAction* LookAction = nullptr;
@@ -98,6 +89,6 @@ protected: // Ehanced Input
 protected:
 	// Called when the controlled character changes
 	UFUNCTION()
-	void OnControlledCharacterChanged();
+	void OnControlledCharacterChanged(const ABaseCharacter* NewCharacter, const ABaseCharacter* OldCharacter);
 
 };

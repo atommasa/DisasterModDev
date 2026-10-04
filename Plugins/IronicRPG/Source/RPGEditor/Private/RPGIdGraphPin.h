@@ -40,7 +40,9 @@ private:
 	FString GetObjectPath() const;
 
 private:
-	TSharedPtr<SObjectPropertyEntryBox> PropertyEntryBox;
+	UEdGraphPin* IdPin;
+
+	TSharedPtr<class SRPGIdAssetPicker> PropertyEntryBox;
 
 	TWeakObjectPtr<URPGPrimaryAsset> Asset;
 

@@ -24,67 +24,66 @@ protected:
 	virtual void PostGameplayEffectExecute(const struct FGameplayEffectModCallbackData& Data) override;
 
 	virtual void BindAttributeChangedDelegates(UAbilitySystemComponent* AbilitySystemComponent) override;
-	virtual TSet<FGameplayAttribute> GetSaveableAttributes() const override;
 	virtual const FGameplayAttribute GetMaxClampAttribute(const FGameplayAttribute& Attribute) const override;
 
 public: // Combat Attributes
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Health")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|Health")
 	FGameplayAttributeData Health = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, Health);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Health")
 	FOnAttributeChangedSignature OnHealthChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Health")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|Health")
 	FGameplayAttributeData MaxHealth = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, MaxHealth);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Health")
 	FOnAttributeChangedSignature OnMaxHealthChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|SpiritEnergy")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|SpiritEnergy")
 	FGameplayAttributeData SpiritEnergy = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, SpiritEnergy);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|SpiritEnergy")
 	FOnAttributeChangedSignature OnSpiritEnergyChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|SpiritEnergy")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|SpiritEnergy")
 	FGameplayAttributeData MaxSpiritEnergy = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, MaxSpiritEnergy);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|SpiritEnergy")
 	FOnAttributeChangedSignature OnMaxSpiritEnergyChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Attack")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|Attack")
 	FGameplayAttributeData Attack = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, Attack);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Attack")
 	FOnAttributeChangedSignature OnAttackChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|Defense")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|Defense")
 	FGameplayAttributeData Defense = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, Defense);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|Defense")
 	FOnAttributeChangedSignature OnDefenseChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|CritialDamage")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|CritialDamage")
 	FGameplayAttributeData CriticalRate = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, CriticalRate);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|CritialDamage")
 	FOnAttributeChangedSignature OnCriticalRateChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|CritialDamage")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|CritialDamage")
 	FGameplayAttributeData CriticalDamage = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, CriticalDamage);
 
 	UPROPERTY(BlueprintAssignable, BlueprintCallable, Category = "Attributes|CritialDamage")
 	FOnAttributeChangedSignature OnCriticalDamageChanged;
 
-	UPROPERTY(BlueprintReadOnly, Category = "Attributes|CritialDamage")
+	UPROPERTY(BlueprintReadOnly, SaveGame, Category = "Attributes|CritialDamage")
 	FGameplayAttributeData CriticalResistance = 1.0f;
 	ATTRIBUTE_ACCESSORS(UCombatAttributeSet, CriticalResistance);
 

@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "GameplayEffect.h"
+#include "GameplayTagContainer.h"
 #include "DataTypes/RPGId.h"
 #include "Abilities/AbilityDataTypes.h"
 #include "CharacterDataTypes.generated.h"
@@ -49,8 +50,8 @@ public:
 	TArray<FAbilityData> LearnedAbilities;
 
 	// Map of input IDs to equipped abilities
-	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame, meta=(IdType = "Ability"))
-	TMap<int32, FRPGId> EquippedAbilities;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame, meta=(Categories = "Ability.Input", IdType = "Ability"))
+	TMap<FGameplayTag, FRPGId> EquippedAbilities;
 
 	// Map of gameplay attributes and their corresponding values
     UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, SaveGame)

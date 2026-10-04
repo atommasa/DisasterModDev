@@ -5,7 +5,6 @@
 #include "CoreMinimal.h" 	
 #include "UObject/NameTypes.h"
 #include "Nodes/NarrativeNodeInfo.h"
-#include "Nodes/NarrativeNodeType.h"
 #include "NarrativeRuntimeGraph.generated.h"
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnNodeStarted, class UNarrativeNodeInfo*, NodeInfo);
@@ -38,9 +37,6 @@ class NARRATIVESYSTEMRUNTIME_API UNarrativeRuntimeNode : public UObject
 public:
     UPROPERTY()
     FGuid NodeGuid;
-
-    UPROPERTY()
-	ENarrativeNodeType NodeType = ENarrativeNodeType::UnknownNode;
 
     UPROPERTY()
     UNarrativeRuntimePin* InputPin;
